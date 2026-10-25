@@ -1,0 +1,13 @@
+{
+  "itemGroup.xweathermod": "Example Mod Tab",
+  "block.xweathermod.example_block": "Example Block",
+  "item.xweathermod.example_item": "Example Item",
+
+  "xweathermod.configuration.title": "XWeather Mod Configs",
+  "xweathermod.configuration.section.xweathermod.common.toml": "XWeather Mod Configs",
+  "xweathermod.configuration.section.xweathermod.common.toml.title": "XWeather Mod Configs",
+  "xweathermod.configuration.items": "Item List",
+  "xweathermod.configuration.logDirtBlock": "Log Dirt Block",
+  "xweathermod.configuration.magicNumberIntroduction": "Magic Number Text",
+  "xweathermod.configuration.magicNumber": "Magic Number"
+}
