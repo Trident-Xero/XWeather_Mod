@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/generated",
+  "textures.item": {
+    "layer0": "xweathermod:item/xweather"
+  }
+}
