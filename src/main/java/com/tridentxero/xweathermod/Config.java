@@ -107,5 +107,24 @@ public class Config {
             .comment("Radius in blocks of the tornado a supercell produces.")
             .defineInRange("supercell.tornadoSize", 40, 4, 150);
 
+    // ---- Lightning ----
+    public static final ModConfigSpec.BooleanValue LIGHTNING_ENABLED = BUILDER
+            .comment("Storms produce lightning and thunder.")
+            .define("lightning.enabled", true);
+
+    public static final ModConfigSpec.DoubleValue LIGHTNING_STRIKES_PER_MINUTE = BUILDER
+            .comment("Strikes per minute for one full-strength 200-block storm near a player. Bigger storms strike more,",
+                    "supercells 1.5x. 0 turns lightning off.")
+            .defineInRange("lightning.strikesPerMinute", 8.0, 0.0, 120.0);
+
+    public static final ModConfigSpec.IntValue LIGHTNING_MAX_DISTANCE = BUILDER
+            .comment("Bolts only strike within this many blocks of a player (and only in loaded chunks).")
+            .defineInRange("lightning.maxDistanceFromPlayer", 120, 30, 256);
+
+    public static final ModConfigSpec.BooleanValue LIGHTNING_REAL_STRIKES = BUILDER
+            .comment("false (default): bolts are visual and audible only. No fires, no damage, no charged creepers.",
+                    "true: vanilla bolts that set fires and hurt entities. Separate from the tornado terrain damage option.")
+            .define("lightning.realStrikes", false);
+
     static final ModConfigSpec SPEC = BUILDER.build();
 }
