@@ -1,31 +1,43 @@
 package com.tridentxero.xweathermod;
 
-import net.minecraft.client.Minecraft;
+import com.tridentxero.xweathermod.client.ClientConfig;
+import com.tridentxero.xweathermod.client.ClientPayloadHandler;
+import com.tridentxero.xweathermod.client.CloudParticleProvider;
+import com.tridentxero.xweathermod.client.RainParticleProvider;
+import com.tridentxero.xweathermod.net.StormSyncPayload;
+import com.tridentxero.xweathermod.particle.ModParticles;
+
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.ModContainer;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.fml.common.Mod;
-import net.neoforged.fml.event.lifecycle.FMLClientSetupEvent;
+import net.neoforged.fml.config.ModConfig;
+import net.neoforged.neoforge.client.event.RegisterParticleProvidersEvent;
 import net.neoforged.neoforge.client.gui.ConfigurationScreen;
 import net.neoforged.neoforge.client.gui.IConfigScreenFactory;
+import net.neoforged.neoforge.client.network.event.RegisterClientPayloadHandlersEvent;
 
-// This class will not load on dedicated servers. Accessing client side code from here is safe.
+// This class does not load on dedicated servers, so client classes are safe here.
 @Mod(value = XWeatherMod.MOD_ID, dist = Dist.CLIENT)
-// You can use EventBusSubscriber to automatically register all static methods in the class annotated with @SubscribeEvent
 @EventBusSubscriber(modid = XWeatherMod.MOD_ID, value = Dist.CLIENT)
 public class XWeatherModClient {
     public XWeatherModClient(ModContainer container) {
-        // Allows NeoForge to create a config screen for this mod's configs.
-        // The config screen is accessed by going to the Mods screen > clicking on your mod > clicking on config.
-        // Do not forget to add translations for your config options to the en_us.json file.
+        // Client-only options: config/xweathermod-client.toml
+        container.registerConfig(ModConfig.Type.CLIENT, ClientConfig.SPEC);
+        // Mods screen -> XWeather Mod -> Config
         container.registerExtensionPoint(IConfigScreenFactory.class, ConfigurationScreen::new);
     }
 
     @SubscribeEvent
-    static void onClientSetup(FMLClientSetupEvent event) {
-        // Some client setup code
-        XWeatherMod.LOGGER.info("HELLO FROM CLIENT SETUP");
-        XWeatherMod.LOGGER.info("MINECRAFT NAME >> {}", Minecraft.getInstance().getUser().getName());
+    static void registerClientPayloads(RegisterClientPayloadHandlersEvent event) {
+        event.register(StormSyncPayload.TYPE, ClientPayloadHandler::handle);
+    }
+
+    @SubscribeEvent
+    static void registerParticleProviders(RegisterParticleProvidersEvent event) {
+        event.registerSpriteSet(ModParticles.CLOUD_SOFT.get(), sprites -> new CloudParticleProvider(sprites, false));
+        event.registerSpriteSet(ModParticles.CLOUD_BANDED.get(), sprites -> new CloudParticleProvider(sprites, true));
+        event.registerSpriteSet(ModParticles.RAIN_STREAK.get(), RainParticleProvider::new);
     }
 }
