@@ -166,19 +166,15 @@ public class Config {
                     "Tiers are gameplay categories from the tornado's wind speed, not a damage rating.")
             .defineInRange("terrain.minTier", 2, 0, 5);
 
+    public static final ModConfigSpec.IntValue TERRAIN_HITS_PER_STEP = BUILDER
+            .comment("Bites one tornado lands on individual blocks per simulation step (10 ticks by default).",
+                    "A bite takes 10% of a block at 65 mph up to 60% at 201 mph (less for harder blocks).")
+            .defineInRange("terrain.hitsPerStep", 24, 1, 200);
+
     public static final ModConfigSpec.IntValue TERRAIN_MAX_BLOCKS_PER_STEP = BUILDER
-            .comment("Most blocks one tornado can remove per simulation step (10 ticks by default), across all its chunks.",
-                    "Lower is gentler and cheaper. Removed blocks never drop items.")
+            .comment("Most blocks one tornado can fully break per simulation step. Lower is gentler and cheaper.",
+                    "Broken blocks never drop items.")
             .defineInRange("terrain.maxBlocksPerStep", 40, 1, 500);
-
-    public static final ModConfigSpec.IntValue TERRAIN_MAX_CHUNKS_PER_STEP = BUILDER
-            .comment("Most chunks (clumps of blocks) one tornado tears out per simulation step.")
-            .defineInRange("terrain.maxChunksPerStep", 3, 1, 20);
-
-    public static final ModConfigSpec.IntValue TERRAIN_MAX_CHUNK_RADIUS = BUILDER
-            .comment("Largest chunk radius in blocks. Actual size grows with wind speed: about 1 block at 65 mph,",
-                    "2 at EF2, 3 at EF4, 4 at EF5, never above this.")
-            .defineInRange("terrain.maxChunkRadius", 4, 1, 6);
 
     static final ModConfigSpec SPEC = BUILDER.build();
 }

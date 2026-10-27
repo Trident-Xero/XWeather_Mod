@@ -24,9 +24,11 @@ import net.neoforged.neoforge.client.event.ClientTickEvent;
  * as before; only the placement model changed, to look more like a real tornado:
  *
  *  - Trumpet profile: a thin stalk at the ground that widens slowly, then flares sharply into the cloud base.
- *  - Three kinds of puff: BODY (the condensation funnel, a thin sheath), DUST (a low, wide, brown debris skirt
- *    around the base, only once the funnel touches down) and COLLAR (a dark, wide disc of larger puffs filling the
- *    cloud base where the funnel attaches).
+ *  - Four kinds of puff: BODY (the condensation funnel, a thin sheath), DUST (a low, wide, brown debris skirt
+ *    around the base, only once the funnel touches down), COLLAR (the WALL CLOUD) and TAIL (the tail cloud).
+ *  - The wall cloud is a wide, dark, rotating bowl hanging below the main cloud layer, lowest at the middle where
+ *    the funnel attaches, with a ragged lighter rim and a few detached scud puffs. The tail cloud is a curved
+ *    band of small, lighter puffs that arcs out behind it and drifts in toward the wall cloud.
  *  - The funnel leans backwards along the tornado's direction of travel and has a slow, kinked sway that is
  *    stronger while the tornado is weak. A weak or dying tornado is a thin rope that thickens as it strengthens.
  *  - It spins faster near the ground than at the top, and descends from the cloud as intensity rises.
@@ -39,7 +41,12 @@ import net.neoforged.neoforge.client.event.ClientTickEvent;
 public final class FunnelSpawner {
     public static final int KIND_BODY = 0;
     public static final int KIND_DUST = 1;
-    public static final int KIND_COLLAR = 2;
+    public static final int KIND_COLLAR = 2; // the wall cloud
+    public static final int KIND_TAIL = 3;
+
+    /** How far below the main cloud layer the wall cloud hangs, and how thick the bowl is (blocks). */
+    private static final double WALL_DROP = 42.0;
+    private static final double WALL_THICKNESS = 30.0;
 
     private static final double STALE_TICKS = 100.0;
     private static final int MAX_SPAWNS_PER_TORNADO_PER_TICK = 110;
@@ -53,6 +60,8 @@ public final class FunnelSpawner {
     private static final Map<Integer, Double> smoothedBase = new HashMap<>();
     private static ClientLevel lastLevel = null;
     private static double spawnRemainder = 0.0;
+    private static double wallRemainder = 0.0;
+    private static double tailRemainder = 0.0;
     /** Per-tornado spawn counter driving the evenly spread (low-discrepancy) puff placement. */
     private static final Map<Integer, Long> sequence = new HashMap<>();
 
@@ -86,7 +95,6 @@ public final class FunnelSpawner {
     public static double radiusAt(TornadoView v, double h, int kind, double param) {
         return switch (kind) {
             case KIND_DUST -> v.size() * (0.25 + param);
-            case KIND_COLLAR -> v.size() * profile(1.0) * param;
             default -> v.size() * profile(h) * rope(v) * param;
         };
     }
@@ -111,6 +119,38 @@ public final class FunnelSpawner {
         return new double[] {x, y, z};
     }
 
+    /** Radius of the wall cloud: about 2.8 x the tornado's size, between 40 and 130 blocks. */
+    public static double wallRadius(TornadoView v) {
+        return Math.max(40.0, Math.min(130.0, v.size() * 2.8));
+    }
+
+    /**
+     * World position of a wall-cloud or tail-cloud puff. The wall cloud is centred on the funnel's top (so it moves,
+     * leans and sways with the funnel); f is the puff's radial fraction (0 = centre, 1 = rim; a few detached puffs
+     * go past 1), jitter in -0.5..1 adds height noise.
+     */
+    public static double[] placeWall(TornadoView v, int kind, double f, double angle, double jitter) {
+        double[] axis = place(v, 1.0, 0.0, 0.0, KIND_BODY);
+        double R = wallRadius(v);
+        if (kind == KIND_TAIL) {
+            double speed = Math.sqrt(v.vx() * v.vx() + v.vz() * v.vz());
+            double back = speed > 1.0E-9 ? Math.atan2(-v.vz(), -v.vx()) : 0.0;
+            double a = back + 0.9 * f;                  // the tail curves round to one side
+            double dist = R * (0.9 + 1.4 * f);
+            double side = jitter * R * 0.12;
+            double x = axis[0] + Math.cos(a) * dist - Math.sin(a) * side;
+            double z = axis[2] + Math.sin(a) * dist + Math.cos(a) * side;
+            double y = v.topY() - 2.0 + 12.0 * f + jitter * 3.0; // rises as it leaves the wall cloud
+            return new double[] {x, y, z};
+        }
+        double r = R * f;
+        double x = axis[0] + Math.cos(angle) * r;
+        double z = axis[2] + Math.sin(angle) * r;
+        // A bowl: lowest in the middle (at the funnel), rising toward the rim.
+        double y = v.topY() + WALL_THICKNESS * Math.pow(Math.min(f, 1.1), 1.6) * 0.85 + jitter * 4.0;
+        return new double[] {x, y, z};
+    }
+
     @SubscribeEvent
     public static void onClientTick(ClientTickEvent.Post event) {
         Minecraft mc = Minecraft.getInstance();
@@ -124,6 +164,8 @@ public final class FunnelSpawner {
             sequence.clear();
             FunnelParticle.LIVE.set(0);
             spawnRemainder = 0.0;
+            wallRemainder = 0.0;
+            tailRemainder = 0.0;
         }
         if (level == null || player == null || mc.isPaused()) {
             return;
@@ -158,7 +200,8 @@ public final class FunnelSpawner {
                 target = player.getY();
             }
             double base = smoothedBase.merge(t.id(), target, (old, now) -> old + (now - old) * 0.15);
-            double top = Math.max(cloudTop, base + 60.0);
+            // The funnel hangs from the wall cloud, which sits WALL_DROP below the main cloud layer.
+            double top = Math.max(cloudTop - (WALL_DROP - 6.0), base + 40.0);
             next.put(t.id(), new TornadoView(t.id(), cx, cz, t.vx(), t.vz(), base, top, t.size(), t.windMph(),
                     t.intensity(), time));
         }
@@ -194,15 +237,7 @@ public final class FunnelSpawner {
                 if (FunnelParticle.LIVE.get() >= maxParticles) {
                     return;
                 }
-                float roll = random.nextFloat();
-                int kind;
-                if (reach >= 1.0 && roll < 0.18F) {
-                    kind = KIND_DUST;
-                } else if (roll < 0.28F) {
-                    kind = KIND_COLLAR;
-                } else {
-                    kind = KIND_BODY;
-                }
+                int kind = (reach >= 1.0 && random.nextFloat() < 0.18F) ? KIND_DUST : KIND_BODY;
 
                 double h;
                 double angle;
@@ -211,10 +246,6 @@ public final class FunnelSpawner {
                     h = random.nextDouble() * 0.09;              // a low skirt, not a column
                     angle = random.nextDouble() * Math.PI * 2.0;
                     param = 0.05 + random.nextDouble() * 1.75;   // out to about 2 x size
-                } else if (kind == KIND_COLLAR) {
-                    h = 0.9 + random.nextDouble() * 0.1;
-                    angle = random.nextDouble() * Math.PI * 2.0;
-                    param = 0.35 + random.nextDouble() * 0.75;   // fills the disc under the cloud base
                 } else {
                     // Golden-ratio sequences spread puffs evenly over height and angle (no clumps, no bare patches).
                     long n = sequence.merge(t.id(), 1L, Long::sum);
@@ -225,7 +256,42 @@ public final class FunnelSpawner {
                 double r = radiusAt(v, h, kind, param);
                 double[] pos = place(v, h, angle, r, kind);
                 mc.particleEngine.add(new FunnelParticle(level, t.id(), pos[0], pos[1], pos[2], (float) h, kind,
-                        (float) param, angle, sprites, random));
+                        (float) param, 0.0F, angle, sprites, random));
+            }
+
+            // Wall cloud and tail cloud: sized by area, separate from the funnel's own rate and the same budget.
+            double R = wallRadius(v);
+            double wallAlive = Math.max(80.0, Math.min(700.0, R * R / 12.0));
+            wallRemainder += wallAlive / 110.0 * Math.min(1.0, v.intensity() * 2.5) * density;
+            tailRemainder += wallAlive * 0.35 / 110.0 * Math.min(1.0, v.intensity() * 2.5) * density;
+            int walls = (int) wallRemainder;
+            int tails = (int) tailRemainder;
+            wallRemainder -= walls;
+            tailRemainder -= tails;
+            for (int i = 0; i < walls + tails; i++) {
+                if (FunnelParticle.LIVE.get() >= maxParticles) {
+                    break;
+                }
+                boolean tail = i >= walls;
+                int kind = tail ? KIND_TAIL : KIND_COLLAR;
+                double f;
+                if (tail) {
+                    f = random.nextDouble();
+                } else if (random.nextFloat() < 0.12F) {
+                    f = 1.0 + random.nextDouble() * 0.25;       // detached scud beyond the rim
+                } else {
+                    f = Math.sqrt(random.nextDouble());         // even over the disc's area
+                }
+                double jitter = -0.5 + random.nextDouble() * 1.5;
+                double angle = random.nextDouble() * Math.PI * 2.0;
+                double[] pos = placeWall(v, kind, f, angle, jitter);
+                // The wall cloud mixes in your banded cloud texture for streaky structure.
+                SpriteSet puffSprites = sprites;
+                if (!tail && CloudParticleProvider.BANDED_SPRITES != null && random.nextFloat() < 0.4F) {
+                    puffSprites = CloudParticleProvider.BANDED_SPRITES;
+                }
+                mc.particleEngine.add(new FunnelParticle(level, t.id(), pos[0], pos[1], pos[2], 1.0F, kind,
+                        (float) f, (float) jitter, angle, puffSprites, random));
             }
         }
         spawnRemainder = Math.min(spawnRemainder, 1.0);

@@ -22,9 +22,11 @@ import net.neoforged.neoforge.client.event.ClientTickEvent;
  * Client only. Shows the blocks a tornado has torn out (see DebrisPayload; the blocks are already removed on the
  * server, this is purely visual).
  *
- *  - Pieces that were NOT lifted shatter on the spot into a small burst of block fragments.
- *  - Pieces that WERE lifted become orbiting debris: each one spirals up the funnel (same lean, sway and spin as
- *    the funnel itself), then at the top or after its time is up is flung off along the tangent and falls away.
+ *  - A piece is a bite taken out of one block (or, at size 1.0, a whole block shattering). The server shows the
+ *    block's crack overlay itself; here a bite throws off block fragments, more of them the bigger the bite.
+ *  - Pieces that were NOT picked up just burst into fragments on the spot.
+ *  - Pieces that WERE picked up become orbiting debris: each one spirals up the funnel (same lean, sway and spin
+ *    as the funnel itself), then at the top or after its time is up is flung off along the tangent and falls away.
  *
  * Rendering note (approximation): a lifted piece is a moving point that emits vanilla block-fragment particles
  * (the ones that show when you break a block) as it travels, so you see a stream of chunks of the right material
@@ -122,8 +124,9 @@ public final class DebrisSpawner {
             if (state == null || state.isAir()) {
                 continue;
             }
+            int fragments = 1 + Math.round(Math.max(0.0F, Math.min(1.0F, p.size())) * 5.0F);
             if (!p.lifted() || view == null || pieces.size() >= max) {
-                burst(level, state, p.x(), p.y(), p.z(), random);
+                burst(level, state, p.x(), p.y(), p.z(), fragments, random);
                 continue;
             }
             double dx = p.x() - view.cx();
@@ -133,13 +136,14 @@ public final class DebrisSpawner {
             double r = Math.max(baseRadius, Math.sqrt(dx * dx + dz * dz));
             double h = Math.max(0.0, Math.min(0.25, (p.y() - view.baseY()) / Math.max(1.0, view.topY() - view.baseY())));
             pieces.add(new Piece(state, payload.tornadoId(), angle, h, r, random));
-            burst(level, state, p.x(), p.y(), p.z(), random); // a puff where it was ripped out
+            burst(level, state, p.x(), p.y(), p.z(), Math.max(1, fragments / 2), random); // where it was ripped off
         }
     }
 
-    private static void burst(ClientLevel level, BlockState state, double x, double y, double z, RandomSource random) {
+    private static void burst(ClientLevel level, BlockState state, double x, double y, double z, int count,
+                              RandomSource random) {
         BlockParticleOption option = new BlockParticleOption(ParticleTypes.BLOCK, state);
-        for (int i = 0; i < 4; i++) {
+        for (int i = 0; i < count; i++) {
             level.addParticle(option, x + (random.nextDouble() - 0.5), y + (random.nextDouble() - 0.5),
                     z + (random.nextDouble() - 0.5), (random.nextDouble() - 0.5) * 0.4, random.nextDouble() * 0.3,
                     (random.nextDouble() - 0.5) * 0.4);
@@ -190,7 +194,7 @@ public final class DebrisSpawner {
                 p.vz *= 0.99;
                 p.flightTicks++;
                 if (p.flightTicks > 45 || (view != null && p.y < view.baseY())) {
-                    burst(level, p.state, p.x, p.y, p.z, random);
+                    burst(level, p.state, p.x, p.y, p.z, 3, random);
                     pieces.remove(i);
                     continue;
                 }

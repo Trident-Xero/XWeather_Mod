@@ -12,9 +12,10 @@ import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.Identifier;
 
 /**
- * Server -> client: blocks a tornado has just removed. Visual only; the blocks are already gone on the server.
- * Each piece carries its position, its block state id (Block.getId) and whether it was lifted into the tornado
- * (it then orbits the funnel) or just destroyed (it bursts into fragments).
+ * Server -> client: chips and blocks a tornado has just torn off. Visual only; the damage is already done on the
+ * server. Each piece carries its position, its block state id (Block.getId), its size (a small bite or a whole
+ * shattering block) and whether it was picked up by the tornado (it then orbits the funnel) or just broke off
+ * (it bursts into fragments).
  */
 public record DebrisPayload(int tornadoId, List<Piece> pieces) implements CustomPacketPayload {
     public static final CustomPacketPayload.Type<DebrisPayload> TYPE =
@@ -26,7 +27,8 @@ public record DebrisPayload(int tornadoId, List<Piece> pieces) implements Custom
     /** Largest piece list sent in one packet. */
     public static final int MAX_PIECES = 200;
 
-    public record Piece(float x, float y, float z, int stateId, boolean lifted) {
+    /** size: 0..1, how much of the block this piece is (a bite is small, a shattering block is 1.0). */
+    public record Piece(float x, float y, float z, int stateId, boolean lifted, float size) {
     }
 
     private static void write(ByteBuf buf, DebrisPayload payload) {
@@ -38,6 +40,7 @@ public record DebrisPayload(int tornadoId, List<Piece> pieces) implements Custom
             buf.writeFloat(p.z());
             ByteBufCodecs.VAR_INT.encode(buf, p.stateId());
             buf.writeBoolean(p.lifted());
+            buf.writeFloat(p.size());
         }
     }
 
@@ -54,7 +57,8 @@ public record DebrisPayload(int tornadoId, List<Piece> pieces) implements Custom
             float z = buf.readFloat();
             int state = ByteBufCodecs.VAR_INT.decode(buf);
             boolean lifted = buf.readBoolean();
-            pieces.add(new Piece(x, y, z, state, lifted));
+            float size = buf.readFloat();
+            pieces.add(new Piece(x, y, z, state, lifted, size));
         }
         return new DebrisPayload(id, pieces);
     }
