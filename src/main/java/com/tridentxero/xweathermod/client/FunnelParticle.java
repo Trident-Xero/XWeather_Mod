@@ -8,38 +8,41 @@ import net.minecraft.client.particle.SpriteSet;
 import net.minecraft.util.RandomSource;
 
 /**
- * One puff of a tornado funnel or its ground dust. Client only. Created by {@link FunnelSpawner}.
+ * One puff of a tornado: funnel body, ground dust or cloud-base collar (see {@link FunnelSpawner}). Client only.
  *
  * It does not move by velocity. Every tick it re-computes its position from the tornado's current state
- * ({@link FunnelSpawner#view(int)}): it orbits the tornado's centre at a fixed height fraction, with the orbit
- * radius following the funnel profile (narrow at the ground, wide at the cloud). So the funnel follows the
- * tornado exactly, rotates at a speed set by the tornado's wind, and disappears when the tornado does.
+ * ({@link FunnelSpawner#view(int)}): it orbits the tornado's centre at a fixed height fraction, spinning faster
+ * near the ground, with the orbit radius following the funnel profile, lean and sway. So the funnel follows the
+ * tornado exactly and disappears with it.
  */
 public class FunnelParticle extends SingleQuadParticle {
     /** Live puff count, used by the spawner as a budget. */
     public static final AtomicInteger LIVE = new AtomicInteger();
 
-    private static final int FADE_IN_TICKS = 12;
-    private static final int FADE_OUT_TICKS = 20;
+    private static final int FADE_IN_TICKS = 8;
+    private static final int FADE_OUT_TICKS = 10;
+    /** When the tornado disappears (dies, or you move out of range) its puffs fade out over this many ticks. */
+    private static final int ORPHAN_FADE_TICKS = 12;
 
     private final int tornadoId;
     /** 0 = ground, 1 = cloud base. */
     private final float heightFraction;
-    /** True for the wide, brown dust ring at ground level. */
-    private final boolean dust;
-    private final float radiusJitter;
+    private final int kind;
+    private final float param;
     private final float maxAlpha;
     private double angle;
+    /** -1 while the tornado exists; counts up once it is gone. */
+    private int orphanTicks = -1;
 
     public FunnelParticle(ClientLevel level, int tornadoId, double x, double y, double z,
-                          float heightFraction, boolean dust, double startAngle,
+                          float heightFraction, int kind, float param, double startAngle,
                           SpriteSet spriteSet, RandomSource random) {
         super(level, x, y, z, spriteSet.first());
         this.tornadoId = tornadoId;
         this.heightFraction = heightFraction;
-        this.dust = dust;
+        this.kind = kind;
+        this.param = param;
         this.angle = startAngle;
-        this.radiusJitter = 0.75F + random.nextFloat() * 0.4F;
 
         this.xd = 0.0;
         this.yd = 0.0;
@@ -48,25 +51,37 @@ public class FunnelParticle extends SingleQuadParticle {
         this.gravity = 0.0F;
         this.hasPhysics = false;
 
-        this.lifetime = 50 + random.nextInt(50);
-        this.maxAlpha = dust ? 0.35F + random.nextFloat() * 0.2F : 0.45F + random.nextFloat() * 0.25F;
+        this.lifetime = 80 + random.nextInt(60);
         this.alpha = 0.0F;
         this.roll = random.nextFloat() * 6.2831855F;
         this.oRoll = this.roll;
 
         float h = heightFraction;
-        if (dust) {
-            this.setColor(0.44F, 0.37F, 0.29F);
-        } else {
-            // Dusty brown at the base, dark grey higher up.
-            float t = Math.min(1.0F, h * 2.5F);
-            this.setColor(0.42F - 0.12F * t, 0.36F + 0.02F * t, 0.30F + 0.06F * t);
-        }
         FunnelSpawner.TornadoView view = FunnelSpawner.view(tornadoId);
         double size = view != null ? view.size() : 20.0;
-        double r = size * FunnelSpawner.profile(h) * this.radiusJitter;
-        this.quadSize = (float) Math.max(1.4, Math.min(dust ? 16.0 : 13.0, r * (dust ? 0.6 : 0.42)))
-                * (0.85F + random.nextFloat() * 0.35F);
+        double r = view != null ? FunnelSpawner.radiusAt(view, h, kind, param) : size * 0.3;
+        float scale = ClientConfig.FUNNEL_PARTICLE_SCALE.get().floatValue();
+
+        if (kind == FunnelSpawner.KIND_DUST) {
+            this.maxAlpha = 0.45F + random.nextFloat() * 0.2F;
+            this.setColor(0.42F, 0.35F, 0.27F);
+            this.quadSize = (float) Math.max(1.5, Math.min(7.0, r * 0.22)) * (0.85F + random.nextFloat() * 0.3F) * scale;
+        } else if (kind == FunnelSpawner.KIND_COLLAR) {
+            this.maxAlpha = 0.6F + random.nextFloat() * 0.2F;
+            this.setColor(0.27F, 0.29F, 0.33F);
+            this.quadSize = (float) Math.max(3.0, Math.min(11.0, size * 0.35)) * (0.8F + random.nextFloat() * 0.4F) * scale;
+        } else {
+            this.maxAlpha = 0.62F + random.nextFloat() * 0.2F;
+            // Dusty brown at the base, light grey in the middle, dark slate toward the cloud.
+            float baseT = Math.max(0.0F, 1.0F - h * 3.0F);
+            float topT = Math.max(0.0F, (h - 0.55F) / 0.45F);
+            float mid = 1.0F - baseT - topT;
+            float red = 0.40F * baseT + 0.54F * mid + 0.30F * topT;
+            float green = 0.34F * baseT + 0.56F * mid + 0.32F * topT;
+            float blue = 0.28F * baseT + 0.60F * mid + 0.36F * topT;
+            this.setColor(red, green, blue);
+            this.quadSize = (float) Math.max(0.9, Math.min(6.0, r * 0.28)) * (0.85F + random.nextFloat() * 0.3F) * scale;
+        }
 
         LIVE.incrementAndGet();
     }
@@ -81,30 +96,40 @@ public class FunnelParticle extends SingleQuadParticle {
             return;
         }
         FunnelSpawner.TornadoView view = FunnelSpawner.view(this.tornadoId);
+        float fade = smooth(Math.min(this.age / (float) FADE_IN_TICKS,
+                (this.lifetime - this.age) / (float) FADE_OUT_TICKS));
+
         if (view == null) {
-            remove();
+            // Tornado gone or out of range: stop moving and fade out instead of vanishing.
+            this.orphanTicks = Math.max(0, this.orphanTicks) + 1;
+            if (this.orphanTicks >= ORPHAN_FADE_TICKS) {
+                remove();
+                return;
+            }
+            this.alpha = this.maxAlpha * fade * (1.0F - this.orphanTicks / (float) ORPHAN_FADE_TICKS);
             return;
         }
+        this.orphanTicks = -1;
 
         double h = this.heightFraction;
-        double r = view.size() * FunnelSpawner.profile((float) h) * this.radiusJitter * (this.dust ? 1.8 : 1.0);
-        // Tangential speed in blocks per tick from the tornado's wind; angular speed = speed / radius.
-        double speed = view.windMph() * 0.025 * Math.max(0.2, view.intensity());
+        double r = FunnelSpawner.radiusAt(view, h, this.kind, this.param);
+        // Tangential speed in blocks per tick from the tornado's wind, faster low down; angular speed = speed / radius.
+        double speed = view.windMph() * 0.025 * Math.max(0.2, view.intensity()) * (1.35 - 0.55 * h);
+        if (this.kind == FunnelSpawner.KIND_COLLAR) {
+            speed *= 0.6; // the wall-cloud collar turns slowly
+        }
         this.angle += speed / Math.max(3.0, r);
 
-        // Slight lean/kink so the funnel is not a perfect cone.
-        double sway = Math.sin(view.time() * 0.03 + h * 3.0) * view.size() * 0.3 * h * h;
-        double cx = view.cx() + sway;
-        double cz = view.cz() + Math.cos(view.time() * 0.025 + h * 2.0) * view.size() * 0.2 * h * h;
+        double[] pos = FunnelSpawner.place(view, h, this.angle, r, this.kind);
+        this.setPos(pos[0], pos[1], pos[2]);
 
-        double px = cx + Math.cos(this.angle) * r;
-        double pz = cz + Math.sin(this.angle) * r;
-        double py = view.baseY() + h * (view.topY() - view.baseY()) + (this.dust ? 1.0 : 0.0);
-        this.setPos(px, py, pz);
+        this.alpha = this.maxAlpha * fade * (float) Math.min(1.0, view.intensity() * 3.0);
+    }
 
-        float in = Math.min(1.0F, this.age / (float) FADE_IN_TICKS);
-        float out = Math.min(1.0F, (this.lifetime - this.age) / (float) FADE_OUT_TICKS);
-        this.alpha = this.maxAlpha * Math.max(0.0F, Math.min(in, out)) * (float) Math.min(1.0, view.intensity() * 3.0);
+    /** Smoothstep: eases both ends of a 0..1 ramp so there is no visible start or stop. */
+    private static float smooth(float t) {
+        float c = Math.max(0.0F, Math.min(1.0F, t));
+        return c * c * (3.0F - 2.0F * c);
     }
 
     @Override

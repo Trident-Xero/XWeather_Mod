@@ -1,6 +1,7 @@
 package com.tridentxero.xweathermod.client;
 
 import com.tridentxero.xweathermod.XWeatherMod;
+import com.tridentxero.xweathermod.net.DebrisPayload;
 import com.tridentxero.xweathermod.net.StormSyncPayload;
 import com.tridentxero.xweathermod.storm.ClientStormState;
 import com.tridentxero.xweathermod.storm.StormSnapshot;
@@ -13,6 +14,10 @@ public final class ClientPayloadHandler {
     private static long lastLogNanos = 0L;
 
     private ClientPayloadHandler() {
+    }
+
+    public static void handleDebris(DebrisPayload payload, IPayloadContext context) {
+        DebrisSpawner.accept(payload);
     }
 
     public static void handle(StormSyncPayload payload, IPayloadContext context) {

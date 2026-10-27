@@ -2,10 +2,15 @@ package com.tridentxero.xweathermod.client;
 
 import java.util.concurrent.atomic.AtomicInteger;
 
+import org.joml.Quaternionf;
+
+import net.minecraft.client.Camera;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.particle.SingleQuadParticle;
 import net.minecraft.client.particle.SpriteSet;
+import net.minecraft.client.renderer.state.level.QuadParticleRenderState;
+import net.minecraft.util.Mth;
 import net.minecraft.util.RandomSource;
 
 /**
@@ -16,11 +21,12 @@ import net.minecraft.util.RandomSource;
  * Drift follows the wind. The streak is tilted to match by rolling the billboard each tick, using the sideways
  * part of the drift as seen from the player's view direction.
  *
- * Known limitation: this is still a camera-facing billboard, so streaks look screen-vertical when you pitch the
- * camera instead of staying world-vertical. Fixing that needs an extract() override whose render-state type
- * (QuadParticleRenderState) lives in a package I could not confirm for 26.1.2.
+ * Orientation: vanilla particles are billboards that face the camera on every axis, so a vertical streak would
+ * rotate with the camera when you look up or down. This particle overrides {@link #extract} to rotate only around
+ * the vertical axis (to face the player) and then apply the wind tilt, so streaks stay upright in the world.
  *
- * UNVERIFIED against a compile: the inherited Particle fields roll and oRoll in 26.1.2.
+ * UNVERIFIED against a compile: the method extractRotatedQuad(QuadParticleRenderState, Camera, Quaternionf, float)
+ * in 26.1.2. The state class itself is confirmed at net.minecraft.client.renderer.state.level.
  */
 public class RainParticle extends SingleQuadParticle {
     /** Blocks per tick the drop falls. */
@@ -63,6 +69,23 @@ public class RainParticle extends SingleQuadParticle {
         float tilt = (float) Math.atan2(lateral, FALL_SPEED);
         this.oRoll = this.roll;
         this.roll = ClientConfig.RAIN_INVERT_TILT.get() ? -tilt : tilt;
+    }
+
+    @Override
+    public void extract(QuadParticleRenderState state, Camera camera, float partialTick) {
+        Minecraft mc = Minecraft.getInstance();
+        Quaternionf rotation = new Quaternionf();
+        if (mc.player != null) {
+            double px = Mth.lerp(partialTick, this.xo, this.x);
+            double pz = Mth.lerp(partialTick, this.zo, this.z);
+            float yaw = (float) Math.atan2(mc.player.getX() - px, mc.player.getZ() - pz);
+            rotation.rotationY(yaw);
+        }
+        float tiltNow = Mth.lerp(partialTick, this.oRoll, this.roll);
+        if (tiltNow != 0.0F) {
+            rotation.rotateZ(tiltNow);
+        }
+        this.extractRotatedQuad(state, camera, rotation, partialTick);
     }
 
     @Override

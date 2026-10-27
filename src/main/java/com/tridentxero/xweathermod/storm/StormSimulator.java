@@ -37,6 +37,7 @@ public final class StormSimulator {
             if (serverTickCount % Config.SYNC_INTERVAL_TICKS.get() == 0) {
                 sync(level);
             }
+            EntityForces.tick(level, level.getDataStorage().computeIfAbsent(StormSavedData.TYPE));
         } catch (RuntimeException e) {
             XWeatherMod.LOGGER.error("Storm simulation error (storms may pause this tick)", e);
         }
@@ -100,6 +101,7 @@ public final class StormSimulator {
                 }
             }
             LightningSimulator.tick(level, data, dt);
+            TerrainDamage.tick(level, data);
         }
 
         List<ServerPlayer> players = level.players();
@@ -111,6 +113,10 @@ public final class StormSimulator {
             } else {
                 double chance = Config.SPAWN_CHANCE_PER_MINUTE.get() * Math.max(1L, dt) / 1200.0;
                 spawn = random.nextDouble() < chance;
+            }
+            Long pausedUntil = SPAWN_PAUSED_UNTIL.get(level.dimension());
+            if (pausedUntil != null && now < pausedUntil) {
+                spawn = false;
             }
             if (spawn) {
                 spawnNearPlayer(data, players, random);
@@ -165,7 +171,10 @@ public final class StormSimulator {
         int maxAge = Config.SUPERCELL_DURATION_MINUTES.get() * 1200;
         // Intensity reaches full at 15% of life, so an instant supercell starts there.
         int startAge = instant ? (int) (maxAge * 0.15) : 0;
-        int tornadoAt = instant ? -1 : (int) (maxAge * 0.40);
+        double buildMin = Math.min(Config.SUPERCELL_BUILD_MIN_MINUTES.get(), Config.SUPERCELL_BUILD_MAX_MINUTES.get());
+        double buildMax = Math.max(Config.SUPERCELL_BUILD_MIN_MINUTES.get(), Config.SUPERCELL_BUILD_MAX_MINUTES.get());
+        // Tornado forms after a random 2-4 minutes by default (supercell.buildMinMinutes / buildMaxMinutes).
+        int tornadoAt = instant ? -1 : (int) ((buildMin + (buildMax - buildMin) * random.nextDouble()) * 1200.0);
 
         StormCell cell = new StormCell(data.allocateId(), x, z, vx, vz, Config.SUPERCELL_RADIUS.get(), startAge, maxAge,
                 true, tornadoAt, Config.SUPERCELL_TORNADO_WIND_MPH.get(), Config.SUPERCELL_TORNADO_SIZE.get());
@@ -176,6 +185,29 @@ public final class StormSimulator {
         data.setDirty();
         XWeatherMod.LOGGER.info("Supercell {} spawned at ({}, {}), radius {}, {}", cell.id, (int) x, (int) z,
                 (int) cell.radius, instant ? "instant" : "building to tornado");
+        return cell;
+    }
+
+    /**
+     * Spawns a full-strength supercell directly over an existing tornado, moving with it, so the tornado sits under
+     * its parent storm (used by /xweather spawn tornado). The supercell has no tornado of its own.
+     * Returns null if the per-dimension storm cap is reached.
+     */
+    public static StormCell spawnSupercellOver(ServerLevel level, TornadoCell tornado) {
+        StormSavedData data = level.getDataStorage().computeIfAbsent(StormSavedData.TYPE);
+        if (data.storms().size() >= Config.MAX_STORMS.get()) {
+            return null;
+        }
+        // Outlive the tornado by a few minutes so the tornado never outlasts its storm.
+        int maxAge = Math.max(Config.SUPERCELL_DURATION_MINUTES.get() * 1200, tornado.maxAge + 3 * 1200);
+        int startAge = (int) (maxAge * 0.15); // already at full strength
+        StormCell cell = new StormCell(data.allocateId(), tornado.x, tornado.z, tornado.vx, tornado.vz,
+                Config.SUPERCELL_RADIUS.get(), startAge, maxAge,
+                true, -1, 0.0F, 0.0F);
+        data.storms().add(cell);
+        data.setDirty();
+        XWeatherMod.LOGGER.info("Supercell {} spawned over tornado {} at ({}, {})", cell.id, tornado.id,
+                (int) tornado.x, (int) tornado.z);
         return cell;
     }
 
@@ -235,6 +267,28 @@ public final class StormSimulator {
         data.storms().add(cell);
         XWeatherMod.LOGGER.info("Storm {} formed at ({}, {}), radius {}, lifetime {} min",
                 cell.id, (int) sx, (int) sz, (int) radius, maxAge / 1200);
+    }
+
+    /** Dimension -> game time until which automatic (random / test-mode) storm spawning is paused after a clear. */
+    private static final java.util.Map<Object, Long> SPAWN_PAUSED_UNTIL = new java.util.HashMap<>();
+    private static final long CLEAR_PAUSE_TICKS = 6000L; // 5 minutes
+
+    /**
+     * Removes every storm and tornado in this dimension (used by /xweather clear) and tells clients right away.
+     * Automatic spawning (including test mode) is paused for 5 minutes so the sky stays clear; commands can still
+     * spawn weather. Returns {storms, tornadoes} removed.
+     */
+    public static int[] clearAll(ServerLevel level) {
+        StormSavedData data = level.getDataStorage().computeIfAbsent(StormSavedData.TYPE);
+        int storms = data.storms().size();
+        int tornadoes = data.tornadoes().size();
+        data.storms().clear();
+        data.tornadoes().clear();
+        data.setDirty();
+        SPAWN_PAUSED_UNTIL.put(level.dimension(), level.getGameTime() + CLEAR_PAUSE_TICKS);
+        sync(level);
+        XWeatherMod.LOGGER.info("Cleared {} storms and {} tornadoes", storms, tornadoes);
+        return new int[] {storms, tornadoes};
     }
 
     /** Wind at a position, from the level's current storms and tornadoes (server side). */

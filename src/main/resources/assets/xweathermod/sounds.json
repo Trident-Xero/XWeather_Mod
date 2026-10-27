@@ -1,0 +1,10 @@
+{
+  "tornado_roar": {
+    "sounds": [ "xweathermod:tornado_roar" ],
+    "subtitle": "subtitles.xweathermod.tornado_roar"
+  },
+  "wind_gust": {
+    "sounds": [ "xweathermod:wind_gust" ],
+    "subtitle": "subtitles.xweathermod.wind_gust"
+  }
+}

@@ -4,6 +4,7 @@ import org.slf4j.Logger;
 
 import com.mojang.logging.LogUtils;
 import com.tridentxero.xweathermod.particle.ModParticles;
+import com.tridentxero.xweathermod.sound.ModSounds;
 
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.ModContainer;
@@ -23,6 +24,7 @@ public class XWeatherMod {
     public XWeatherMod(IEventBus modEventBus, ModContainer modContainer) {
         modContainer.registerConfig(ModConfig.Type.COMMON, Config.SPEC);
         ModParticles.PARTICLES.register(modEventBus);
+        ModSounds.SOUNDS.register(modEventBus);
         LOGGER.info("XWeather Mod (Stage 1b) loaded");
     }
 }

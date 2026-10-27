@@ -21,6 +21,9 @@ public class CloudParticle extends SingleQuadParticle {
 
     private static final int FADE_TICKS = 60;
 
+    /** Set by {@link CloudSpawner} while no storm exists: every live puff then fades out within about 30 ticks. */
+    public static volatile boolean FADE_ALL = false;
+
     private final float maxAlpha;
 
     public CloudParticle(ClientLevel level, double x, double y, double z,
@@ -52,6 +55,9 @@ public class CloudParticle extends SingleQuadParticle {
     @Override
     public void tick() {
         super.tick();
+        if (FADE_ALL && this.age < this.lifetime - 30) {
+            this.age = this.lifetime - 30;
+        }
         float in = Math.min(1.0F, this.age / (float) FADE_TICKS);
         float out = Math.min(1.0F, (this.lifetime - this.age) / (float) FADE_TICKS);
         this.alpha = this.maxAlpha * Math.max(0.0F, Math.min(in, out));

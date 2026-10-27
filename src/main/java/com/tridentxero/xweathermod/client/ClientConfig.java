@@ -63,14 +63,38 @@ public final class ClientConfig {
             .comment("How thick the funnel looks. 1.0 is the default, 0.5 is half as many puffs, 2.0 is twice as many.")
             .defineInRange("funnel.density", 1.0, 0.1, 3.0);
 
+    public static final ModConfigSpec.DoubleValue FUNNEL_PARTICLE_SCALE = BUILDER
+            .comment("Size of each funnel puff. 1.0 is the default (small, tight puffs), 0.5 is half the size.")
+            .defineInRange("funnel.particleScale", 1.0, 0.2, 3.0);
+
     public static final ModConfigSpec.IntValue FUNNEL_MAX_PARTICLES = BUILDER
             .comment("Maximum funnel puffs alive at once, across all tornadoes. Lower this if the game stutters near a tornado.",
                     "0 disables funnels entirely.")
-            .defineInRange("funnel.maxParticles", 2000, 0, 8000);
+            .defineInRange("funnel.maxParticles", 5000, 0, 15000);
 
     public static final ModConfigSpec.IntValue FUNNEL_MAX_DISTANCE = BUILDER
             .comment("Funnels are only drawn for tornadoes within this many blocks of you.")
             .defineInRange("funnel.maxDistance", 900, 128, 2000);
+
+    // ---- Flying debris (when tornadoes tear out blocks) ----
+    public static final ModConfigSpec.BooleanValue DEBRIS_ENABLED = BUILDER
+            .comment("Show blocks torn out by tornadoes as debris orbiting the funnel (only happens when the server",
+                    "has terrain.enabled on).")
+            .define("debris.enabled", true);
+
+    public static final ModConfigSpec.IntValue DEBRIS_MAX_PIECES = BUILDER
+            .comment("Most chunks orbiting tornadoes at once. Each one leaves a trail of block fragments, so lower this",
+                    "if the game stutters.")
+            .defineInRange("debris.maxPieces", 150, 0, 600);
+
+    // ---- Sound ----
+    public static final ModConfigSpec.BooleanValue SOUND_ENABLED = BUILDER
+            .comment("Weather sounds: rain, wind gusts and the tornado roar.")
+            .define("sound.enabled", true);
+
+    public static final ModConfigSpec.DoubleValue SOUND_VOLUME = BUILDER
+            .comment("Overall volume of this mod's weather sounds. 1.0 is the default.")
+            .defineInRange("sound.volume", 1.0, 0.0, 2.0);
 
     // ---- Debug ----
     public static final ModConfigSpec.BooleanValue DEBUG_LOGGING = BUILDER

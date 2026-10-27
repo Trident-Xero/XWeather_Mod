@@ -20,32 +20,41 @@ import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.client.event.ClientTickEvent;
 
 /**
- * Client only. Draws tornado funnels from the synced tornado data (no new network traffic).
+ * Client only. Draws tornado funnels from the synced tornado data (no new network traffic). Same particle texture
+ * as before; only the placement model changed, to look more like a real tornado:
  *
- * Each tick, for every tornado near the player, it:
- *  1. extrapolates the tornado's centre from its last snapshot and finds the ground height there
- *     (smoothed, so the funnel base does not jump);
- *  2. publishes that as a {@link TornadoView} that the {@link FunnelParticle}s read;
- *  3. creates new puffs. The funnel "descends" as the tornado intensifies: only the upper part exists at first,
- *     and it reaches the ground at about 60% intensity, at which point a ground dust ring appears.
+ *  - Trumpet profile: a thin stalk at the ground that widens slowly, then flares sharply into the cloud base.
+ *  - Three kinds of puff: BODY (the condensation funnel, a thin sheath), DUST (a low, wide, brown debris skirt
+ *    around the base, only once the funnel touches down) and COLLAR (a dark, wide disc of larger puffs filling the
+ *    cloud base where the funnel attaches).
+ *  - The funnel leans backwards along the tornado's direction of travel and has a slow, kinked sway that is
+ *    stronger while the tornado is weak. A weak or dying tornado is a thin rope that thickens as it strengthens.
+ *  - It spins faster near the ground than at the top, and descends from the cloud as intensity rises.
+ *  - Colour runs from dusty brown at the base through light grey in the middle to dark slate at the cloud.
  *
- * Funnel shape: radius = size * profile(h), narrow at the ground (0.3 x size) widening to 2 x size at the cloud.
- * Cost is bounded by funnel.maxParticles. Visual only: damage and forces are a later step.
+ * Each tick it publishes a {@link TornadoView} per nearby tornado for {@link FunnelParticle} and
+ * {@link DebrisSpawner} to read. Cost is bounded by funnel.maxParticles. Visual only.
  */
 @EventBusSubscriber(modid = XWeatherMod.MOD_ID, value = Dist.CLIENT)
 public final class FunnelSpawner {
-    private static final double STALE_TICKS = 100.0;
-    private static final int MAX_SPAWNS_PER_TORNADO_PER_TICK = 40;
+    public static final int KIND_BODY = 0;
+    public static final int KIND_DUST = 1;
+    public static final int KIND_COLLAR = 2;
 
-    /** Per-tornado state for the particles. Replaced wholesale each tick; reads never block. */
-    public record TornadoView(double cx, double cz, double baseY, double topY, double size,
-                              double windMph, double intensity, double time) {
+    private static final double STALE_TICKS = 100.0;
+    private static final int MAX_SPAWNS_PER_TORNADO_PER_TICK = 110;
+
+    /** Per-tornado state for the particles. Replaced wholesale each tick; reads never block. vx/vz in blocks per tick. */
+    public record TornadoView(int id, double cx, double cz, double vx, double vz, double baseY, double topY,
+                              double size, double windMph, double intensity, double time) {
     }
 
     private static volatile Map<Integer, TornadoView> views = Map.of();
     private static final Map<Integer, Double> smoothedBase = new HashMap<>();
     private static ClientLevel lastLevel = null;
     private static double spawnRemainder = 0.0;
+    /** Per-tornado spawn counter driving the evenly spread (low-discrepancy) puff placement. */
+    private static final Map<Integer, Long> sequence = new HashMap<>();
 
     private FunnelSpawner() {
     }
@@ -54,9 +63,52 @@ public final class FunnelSpawner {
         return views.get(tornadoId);
     }
 
-    /** Funnel radius as a multiple of the tornado's size at height fraction h (0 ground, 1 cloud). */
-    public static float profile(float h) {
-        return 0.3F + 1.7F * h * h;
+    private static double frac(double v) {
+        return v - Math.floor(v);
+    }
+
+    private static double smooth(double t) {
+        double c = Math.max(0.0, Math.min(1.0, t));
+        return c * c * (3.0 - 2.0 * c);
+    }
+
+    /** Funnel radius as a multiple of the tornado's size at height fraction h (0 ground, 1 cloud): a trumpet. */
+    public static double profile(double h) {
+        return 0.16 + 0.22 * h + 1.25 * h * h * h * h * h;
+    }
+
+    /** 0.45 for a barely-there rope, up to 1.0 for a mature tornado. */
+    public static double rope(TornadoView v) {
+        return 0.45 + 0.55 * smooth(v.intensity() / 0.5);
+    }
+
+    /** Orbit radius in blocks. param: radial multiplier for the puff (jitter for BODY, spread for DUST and COLLAR). */
+    public static double radiusAt(TornadoView v, double h, int kind, double param) {
+        return switch (kind) {
+            case KIND_DUST -> v.size() * (0.25 + param);
+            case KIND_COLLAR -> v.size() * profile(1.0) * param;
+            default -> v.size() * profile(h) * rope(v) * param;
+        };
+    }
+
+    /**
+     * World position of a puff at height fraction h, orbit angle and radius r, including the funnel's backward lean
+     * and kinked sway. Used when creating a puff and every tick afterwards, so a new puff never jumps.
+     */
+    public static double[] place(TornadoView v, double h, double angle, double r, int kind) {
+        double weak = 1.5 - 0.5 * smooth(v.intensity() / 0.5); // weak tornadoes lean and wander more
+        double speed = Math.sqrt(v.vx() * v.vx() + v.vz() * v.vz());
+        double bx = speed > 1.0E-9 ? -v.vx() / speed : 1.0; // backwards along travel
+        double bz = speed > 1.0E-9 ? -v.vz() / speed : 0.0;
+        double lean = v.size() * 0.9 * Math.pow(h, 1.6) * weak;
+        double kink = Math.sin(v.time() * 0.02 + h * 5.0 + v.id() * 1.3) * v.size() * 0.25 * h * weak;
+        double kinkAlong = Math.cos(v.time() * 0.017 + h * 4.0 + v.id() * 0.7) * v.size() * 0.15 * h * weak;
+        double cx = v.cx() + bx * (lean + kinkAlong) - bz * kink;
+        double cz = v.cz() + bz * (lean + kinkAlong) + bx * kink;
+        double x = cx + Math.cos(angle) * r;
+        double z = cz + Math.sin(angle) * r;
+        double y = v.baseY() + h * (v.topY() - v.baseY()) + (kind == KIND_DUST ? 0.5 : 0.0);
+        return new double[] {x, y, z};
     }
 
     @SubscribeEvent
@@ -69,6 +121,7 @@ public final class FunnelSpawner {
             lastLevel = level;
             views = Map.of();
             smoothedBase.clear();
+            sequence.clear();
             FunnelParticle.LIVE.set(0);
             spawnRemainder = 0.0;
         }
@@ -81,6 +134,7 @@ public final class FunnelSpawner {
         if (!ClientConfig.FUNNEL_ENABLED.get() || tornadoes.isEmpty() || elapsedTicks > STALE_TICKS) {
             views = Map.of();
             smoothedBase.clear();
+            sequence.clear();
             return;
         }
 
@@ -105,7 +159,8 @@ public final class FunnelSpawner {
             }
             double base = smoothedBase.merge(t.id(), target, (old, now) -> old + (now - old) * 0.15);
             double top = Math.max(cloudTop, base + 60.0);
-            next.put(t.id(), new TornadoView(cx, cz, base, top, t.size(), t.windMph(), t.intensity(), time));
+            next.put(t.id(), new TornadoView(t.id(), cx, cz, t.vx(), t.vz(), base, top, t.size(), t.windMph(),
+                    t.intensity(), time));
         }
         smoothedBase.keySet().retainAll(next.keySet());
         views = next;
@@ -123,7 +178,10 @@ public final class FunnelSpawner {
             if (v == null) {
                 continue;
             }
-            double rate = 10.0 * v.intensity() * Math.sqrt(Math.max(4.0, v.size()) / 30.0) * density;
+            double rate = 38.0 * v.intensity() * Math.sqrt(Math.max(4.0, v.size()) / 30.0) * density;
+            // Never ask for more than the budget can sustain (average puff life is about 110 ticks). Staying under
+            // the cap keeps the spawn rate steady, so the funnel gets thinner evenly instead of developing gaps.
+            rate = Math.min(rate, maxParticles * 0.8 / 110.0 / Math.max(1, next.size()));
             spawnRemainder += rate;
             int count = Math.min(MAX_SPAWNS_PER_TORNADO_PER_TICK, (int) spawnRemainder);
             spawnRemainder -= count;
@@ -136,14 +194,38 @@ public final class FunnelSpawner {
                 if (FunnelParticle.LIVE.get() >= maxParticles) {
                     return;
                 }
-                boolean dust = reach >= 1.0 && random.nextFloat() < 0.18F;
-                float h = dust ? 0.0F : (float) (lowest + (1.0 - lowest) * random.nextDouble());
-                double angle = random.nextDouble() * Math.PI * 2.0;
-                double r = v.size() * profile(h) * (dust ? 1.8 : 1.0);
-                double x = v.cx() + Math.cos(angle) * r;
-                double z = v.cz() + Math.sin(angle) * r;
-                double y = v.baseY() + h * (v.topY() - v.baseY());
-                mc.particleEngine.add(new FunnelParticle(level, t.id(), x, y, z, h, dust, angle, sprites, random));
+                float roll = random.nextFloat();
+                int kind;
+                if (reach >= 1.0 && roll < 0.18F) {
+                    kind = KIND_DUST;
+                } else if (roll < 0.28F) {
+                    kind = KIND_COLLAR;
+                } else {
+                    kind = KIND_BODY;
+                }
+
+                double h;
+                double angle;
+                double param;
+                if (kind == KIND_DUST) {
+                    h = random.nextDouble() * 0.09;              // a low skirt, not a column
+                    angle = random.nextDouble() * Math.PI * 2.0;
+                    param = 0.05 + random.nextDouble() * 1.75;   // out to about 2 x size
+                } else if (kind == KIND_COLLAR) {
+                    h = 0.9 + random.nextDouble() * 0.1;
+                    angle = random.nextDouble() * Math.PI * 2.0;
+                    param = 0.35 + random.nextDouble() * 0.75;   // fills the disc under the cloud base
+                } else {
+                    // Golden-ratio sequences spread puffs evenly over height and angle (no clumps, no bare patches).
+                    long n = sequence.merge(t.id(), 1L, Long::sum);
+                    h = lowest + (1.0 - lowest) * frac(n * 0.6180339887);
+                    angle = frac(n * 0.7548776662 + 0.31) * Math.PI * 2.0;
+                    param = 0.93 + random.nextDouble() * 0.14;   // thin sheath: small radial jitter
+                }
+                double r = radiusAt(v, h, kind, param);
+                double[] pos = place(v, h, angle, r, kind);
+                mc.particleEngine.add(new FunnelParticle(level, t.id(), pos[0], pos[1], pos[2], (float) h, kind,
+                        (float) param, angle, sprites, random));
             }
         }
         spawnRemainder = Math.min(spawnRemainder, 1.0);

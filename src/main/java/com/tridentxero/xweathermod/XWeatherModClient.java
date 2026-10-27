@@ -4,6 +4,7 @@ import com.tridentxero.xweathermod.client.ClientConfig;
 import com.tridentxero.xweathermod.client.ClientPayloadHandler;
 import com.tridentxero.xweathermod.client.CloudParticleProvider;
 import com.tridentxero.xweathermod.client.RainParticleProvider;
+import com.tridentxero.xweathermod.net.DebrisPayload;
 import com.tridentxero.xweathermod.net.StormSyncPayload;
 import com.tridentxero.xweathermod.particle.ModParticles;
 
@@ -32,6 +33,7 @@ public class XWeatherModClient {
     @SubscribeEvent
     static void registerClientPayloads(RegisterClientPayloadHandlersEvent event) {
         event.register(StormSyncPayload.TYPE, ClientPayloadHandler::handle);
+        event.register(DebrisPayload.TYPE, ClientPayloadHandler::handleDebris);
     }
 
     @SubscribeEvent

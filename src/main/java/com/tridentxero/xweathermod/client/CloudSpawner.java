@@ -65,6 +65,8 @@ public final class CloudSpawner {
             logDebug(player, elapsedTicks);
         }
 
+        CloudParticle.FADE_ALL = ClientStormState.storms().isEmpty() || elapsedTicks > STALE_TICKS;
+
         int maxPuffs = ClientConfig.MAX_PUFFS.get();
         if (maxPuffs <= 0 || ClientStormState.storms().isEmpty() || elapsedTicks > STALE_TICKS) {
             return;

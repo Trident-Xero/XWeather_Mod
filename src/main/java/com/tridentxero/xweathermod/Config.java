@@ -96,8 +96,16 @@ public class Config {
             .defineInRange("supercell.radius", 350, 100, 1000);
 
     public static final ModConfigSpec.IntValue SUPERCELL_DURATION_MINUTES = BUILDER
-            .comment("Lifetime of a supercell in minutes. In 'build_to_tornado' mode the tornado forms at about 40% of this.")
+            .comment("Lifetime of a supercell in minutes. Make it longer than supercell.buildMaxMinutes plus the tornado duration.")
             .defineInRange("supercell.durationMinutes", 20, 4, 120);
+
+    public static final ModConfigSpec.DoubleValue SUPERCELL_BUILD_MIN_MINUTES = BUILDER
+            .comment("'build_to_tornado' supercells drop their tornado between this many minutes (earliest)...")
+            .defineInRange("supercell.buildMinMinutes", 2.0, 0.5, 30.0);
+
+    public static final ModConfigSpec.DoubleValue SUPERCELL_BUILD_MAX_MINUTES = BUILDER
+            .comment("...and this many minutes (latest) after they start. The exact time is random in that range.")
+            .defineInRange("supercell.buildMaxMinutes", 4.0, 0.5, 30.0);
 
     public static final ModConfigSpec.IntValue SUPERCELL_TORNADO_WIND_MPH = BUILDER
             .comment("Peak wind in mph of the tornado a supercell produces.")
@@ -125,6 +133,52 @@ public class Config {
             .comment("false (default): bolts are visual and audible only. No fires, no damage, no charged creepers.",
                     "true: vanilla bolts that set fires and hurt entities. Separate from the tornado terrain damage option.")
             .define("lightning.realStrikes", false);
+
+    // ---- Entity forces (wind and tornado motion) ----
+    public static final ModConfigSpec.BooleanValue FORCES_ENABLED = BUILDER
+            .comment("Wind and tornadoes push, pull and lift entities. Motion only: no direct damage, no block changes.")
+            .define("forces.enabled", true);
+
+    public static final ModConfigSpec.BooleanValue FORCES_AFFECT_PLAYERS = BUILDER
+            .comment("Also push players (creative and spectator players are never affected).")
+            .define("forces.affectPlayers", true);
+
+    public static final ModConfigSpec.BooleanValue FORCES_STORM_WIND = BUILDER
+            .comment("Strong storm wind (40+ mph) gently pushes exposed entities near players, even outside a tornado.")
+            .define("forces.stormWind", true);
+
+    public static final ModConfigSpec.DoubleValue FORCES_STRENGTH = BUILDER
+            .comment("Overall strength multiplier for all entity forces. 0.5 is half as strong, 2.0 twice.")
+            .defineInRange("forces.strength", 1.0, 0.0, 5.0);
+
+    public static final ModConfigSpec.IntValue FORCES_MAX_ENTITIES = BUILDER
+            .comment("Most entities moved per tick in one dimension. Lower this on busy servers.")
+            .defineInRange("forces.maxEntitiesPerTick", 200, 10, 2000);
+
+    // ---- Terrain damage (separate from entity forces; OFF by default) ----
+    public static final ModConfigSpec.BooleanValue TERRAIN_ENABLED = BUILDER
+            .comment("Allow tornadoes to remove blocks. OFF by default. Has no claim or spawn-protection integration yet,",
+                    "so leave it off on servers that rely on those. Entity forces are a separate setting.")
+            .define("terrain.enabled", false);
+
+    public static final ModConfigSpec.IntValue TERRAIN_MIN_TIER = BUILDER
+            .comment("Lowest tornado tier that removes blocks: 0=EF0, 1=EF1, 2=EF2, 3=EF3, 4=EF4, 5=EF5.",
+                    "Tiers are gameplay categories from the tornado's wind speed, not a damage rating.")
+            .defineInRange("terrain.minTier", 2, 0, 5);
+
+    public static final ModConfigSpec.IntValue TERRAIN_MAX_BLOCKS_PER_STEP = BUILDER
+            .comment("Most blocks one tornado can remove per simulation step (10 ticks by default), across all its chunks.",
+                    "Lower is gentler and cheaper. Removed blocks never drop items.")
+            .defineInRange("terrain.maxBlocksPerStep", 40, 1, 500);
+
+    public static final ModConfigSpec.IntValue TERRAIN_MAX_CHUNKS_PER_STEP = BUILDER
+            .comment("Most chunks (clumps of blocks) one tornado tears out per simulation step.")
+            .defineInRange("terrain.maxChunksPerStep", 3, 1, 20);
+
+    public static final ModConfigSpec.IntValue TERRAIN_MAX_CHUNK_RADIUS = BUILDER
+            .comment("Largest chunk radius in blocks. Actual size grows with wind speed: about 1 block at 65 mph,",
+                    "2 at EF2, 3 at EF4, 4 at EF5, never above this.")
+            .defineInRange("terrain.maxChunkRadius", 4, 1, 6);
 
     static final ModConfigSpec SPEC = BUILDER.build();
 }

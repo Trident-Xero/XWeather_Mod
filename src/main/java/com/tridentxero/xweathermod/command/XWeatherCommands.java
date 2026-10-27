@@ -28,10 +28,13 @@ import net.neoforged.neoforge.event.RegisterCommandsEvent;
  * /xweather spawn supercell instant
  *   A supercell at full strength with its tornado already on the ground.
  *   Size, wind and lifetime come from the supercell.* settings in the common config.
+ * /xweather clear
+ *   Removes every storm and tornado in this dimension and pauses automatic spawning for 5 minutes.
  * /xweather lightning
  *   Strikes lightning at your position (visual only unless lightning.realStrikes is on).
  * /xweather wind
  *   Reports the wind at your position: speed, gust speed and the direction it blows from.
+ * The tornado command also spawns a full-strength supercell above the tornado (if under the storm limit).
  * Spawns at the position of whoever runs it (player position, or the command block / console position).
  * Requires the "gamemaster" (op level 2) permission.
  *
@@ -55,6 +58,7 @@ public final class XWeatherCommands {
                 .requires(Commands.hasPermission(Commands.LEVEL_GAMEMASTERS))
                 .then(Commands.literal("wind").executes(XWeatherCommands::reportWind))
                 .then(Commands.literal("lightning").executes(XWeatherCommands::strikeLightning))
+                .then(Commands.literal("clear").executes(XWeatherCommands::clearWeather))
                 .then(Commands.literal("spawn")
                         .then(Commands.literal("tornado")
                                 .then(Commands.argument("windspeed", DoubleArgumentType.doubleArg(40.0, 300.0))
@@ -67,6 +71,15 @@ public final class XWeatherCommands {
                                         .executes(ctx -> spawnSupercell(ctx, false)))
                                 .then(Commands.literal("instant")
                                         .executes(ctx -> spawnSupercell(ctx, true))))));
+    }
+
+    private static int clearWeather(CommandContext<CommandSourceStack> context) {
+        CommandSourceStack source = context.getSource();
+        int[] removed = StormSimulator.clearAll(source.getLevel());
+        String message = String.format("Cleared %d storm(s) and %d tornado(es) in this dimension. "
+                + "Automatic weather is paused for 5 minutes.", removed[0], removed[1]);
+        source.sendSuccess(() -> Component.literal(message), true);
+        return removed[0] + removed[1];
     }
 
     private static int strikeLightning(CommandContext<CommandSourceStack> context) {
@@ -119,8 +132,8 @@ public final class XWeatherCommands {
         String message = instant
                 ? String.format("Spawned supercell #%d at %d, %d: full strength, tornado on the ground (if under the tornado limit)",
                         storm.id, (int) x, (int) z)
-                : String.format("Spawned supercell #%d at %d, %d: building, tornado forms in about %d minutes",
-                        storm.id, (int) x, (int) z, (int) ((storm.tornadoAtAge - storm.age) / 1200));
+                : String.format("Spawned supercell #%d at %d, %d: building, tornado forms in about %.1f minutes",
+                        storm.id, (int) x, (int) z, (storm.tornadoAtAge - storm.age) / 1200.0);
         source.sendSuccess(() -> Component.literal(message), true);
         return 1;
     }
@@ -144,8 +157,11 @@ public final class XWeatherCommands {
             return 0;
         }
 
-        String message = String.format("Spawned %s tornado #%d: %d mph, radius %d blocks, at %d, %d (gameplay tier, not a damage rating)",
-                tornado.tier().label, tornado.id, (int) windspeed, (int) size, (int) x, (int) z);
+        StormCell parent = StormSimulator.spawnSupercellOver(level, tornado);
+        String parentText = parent != null ? " under supercell #" + parent.id
+                : " (no supercell: storm limit reached, storms.maxPerDimension)";
+        String message = String.format("Spawned %s tornado #%d: %d mph, radius %d blocks, at %d, %d%s (gameplay tier, not a damage rating)",
+                tornado.tier().label, tornado.id, (int) windspeed, (int) size, (int) x, (int) z, parentText);
         source.sendSuccess(() -> Component.literal(message), true);
         return 1;
     }

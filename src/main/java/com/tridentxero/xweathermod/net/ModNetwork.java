@@ -24,5 +24,6 @@ public final class ModNetwork {
     public static void registerPayloads(RegisterPayloadHandlersEvent event) {
         PayloadRegistrar registrar = event.registrar("1");
         registrar.playToClient(StormSyncPayload.TYPE, StormSyncPayload.STREAM_CODEC);
+        registrar.playToClient(DebrisPayload.TYPE, DebrisPayload.STREAM_CODEC);
     }
 }
