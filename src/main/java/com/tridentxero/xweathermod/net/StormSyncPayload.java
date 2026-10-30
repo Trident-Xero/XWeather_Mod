@@ -39,6 +39,8 @@ public record StormSyncPayload(List<StormSnapshot> storms, List<TornadoSnapshot>
             buf.writeFloat(s.vz());
             buf.writeFloat(s.radius());
             buf.writeFloat(s.intensity());
+            buf.writeBoolean(s.supercell());
+            buf.writeFloat(s.development());
         }
         ByteBufCodecs.VAR_INT.encode(buf, payload.tornadoes.size());
         for (TornadoSnapshot t : payload.tornadoes) {
@@ -68,7 +70,9 @@ public record StormSyncPayload(List<StormSnapshot> storms, List<TornadoSnapshot>
             float vz = buf.readFloat();
             float radius = buf.readFloat();
             float intensity = buf.readFloat();
-            storms.add(new StormSnapshot(id, x, z, vx, vz, radius, intensity));
+            boolean supercell = buf.readBoolean();
+            float development = buf.readFloat();
+            storms.add(new StormSnapshot(id, x, z, vx, vz, radius, intensity, supercell, development));
         }
         int tornadoCount = ByteBufCodecs.VAR_INT.decode(buf);
         if (tornadoCount < 0 || tornadoCount > MAX_ENTRIES) {

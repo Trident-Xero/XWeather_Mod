@@ -154,7 +154,7 @@ public final class StormSimulator {
      * It moves in a random direction at the normal storm speed.
      *
      * @param instant true: starts at full strength and drops its tornado immediately.
-     *                false: starts from nothing, ramps up, and drops a tornado at about 40% of its life.
+     *                false: starts from nothing, ramps up, and drops a tornado after 30-50 seconds (configurable).
      * @return the storm, or null if the per-dimension storm cap is reached.
      *         Check {@link StormCell#tornadoAtAge} / the tornado list to see whether an instant tornado was created.
      */
@@ -171,12 +171,15 @@ public final class StormSimulator {
         int maxAge = Config.SUPERCELL_DURATION_MINUTES.get() * 1200;
         // Intensity reaches full at 15% of life, so an instant supercell starts there.
         int startAge = instant ? (int) (maxAge * 0.15) : 0;
-        double buildMin = Math.min(Config.SUPERCELL_BUILD_MIN_MINUTES.get(), Config.SUPERCELL_BUILD_MAX_MINUTES.get());
-        double buildMax = Math.max(Config.SUPERCELL_BUILD_MIN_MINUTES.get(), Config.SUPERCELL_BUILD_MAX_MINUTES.get());
-        // Tornado forms after a random 2-4 minutes by default (supercell.buildMinMinutes / buildMaxMinutes).
-        int tornadoAt = instant ? -1 : (int) ((buildMin + (buildMax - buildMin) * random.nextDouble()) * 1200.0);
+        double buildMin = Math.min(Config.SUPERCELL_BUILD_MIN_SECONDS.get(), Config.SUPERCELL_BUILD_MAX_SECONDS.get());
+        double buildMax = Math.max(Config.SUPERCELL_BUILD_MIN_SECONDS.get(), Config.SUPERCELL_BUILD_MAX_SECONDS.get());
+        // Tornado forms after a random 30-50 seconds by default (supercell.buildMinSeconds / buildMaxSeconds).
+        int tornadoAt = instant ? -1 : (int) ((buildMin + (buildMax - buildMin) * random.nextDouble()) * 20.0);
 
-        StormCell cell = new StormCell(data.allocateId(), x, z, vx, vz, Config.SUPERCELL_RADIUS.get(), startAge, maxAge,
+        // A giant tornado needs a parent storm that is bigger than it is.
+        float stormRadius = (float) Math.min(12000.0, Math.max(Config.SUPERCELL_RADIUS.get(),
+                Config.SUPERCELL_TORNADO_SIZE.get() * 2.5));
+        StormCell cell = new StormCell(data.allocateId(), x, z, vx, vz, stormRadius, startAge, maxAge,
                 true, tornadoAt, Config.SUPERCELL_TORNADO_WIND_MPH.get(), Config.SUPERCELL_TORNADO_SIZE.get());
         data.storms().add(cell);
         if (instant) {
@@ -201,8 +204,16 @@ public final class StormSimulator {
         // Outlive the tornado by a few minutes so the tornado never outlasts its storm.
         int maxAge = Math.max(Config.SUPERCELL_DURATION_MINUTES.get() * 1200, tornado.maxAge + 3 * 1200);
         int startAge = (int) (maxAge * 0.15); // already at full strength
-        StormCell cell = new StormCell(data.allocateId(), tornado.x, tornado.z, tornado.vx, tornado.vz,
-                Config.SUPERCELL_RADIUS.get(), startAge, maxAge,
+        // The tornado sits TORNADO_BACK_FRACTION of the radius behind a supercell's centre (under its wall cloud),
+        // so centre the storm that far ahead of the tornado.
+        double sp = Math.sqrt((double) tornado.vx * tornado.vx + (double) tornado.vz * tornado.vz);
+        double fx = sp > 1.0E-9 ? tornado.vx / sp : 0.0;
+        double fz = sp > 1.0E-9 ? tornado.vz / sp : 0.0;
+        float stormRadius = (float) Math.min(12000.0, Math.max(Config.SUPERCELL_RADIUS.get(), tornado.size * 2.5));
+        double ahead = stormRadius * StormCell.TORNADO_BACK_FRACTION;
+        StormCell cell = new StormCell(data.allocateId(), tornado.x + fx * ahead, tornado.z + fz * ahead,
+                tornado.vx, tornado.vz,
+                stormRadius, startAge, maxAge,
                 true, -1, 0.0F, 0.0F);
         data.storms().add(cell);
         data.setDirty();
@@ -220,8 +231,8 @@ public final class StormSimulator {
         double speed = Math.sqrt(storm.vx * storm.vx + storm.vz * storm.vz);
         double bx = speed > 1.0E-9 ? -storm.vx / speed : 0.0;
         double bz = speed > 1.0E-9 ? -storm.vz / speed : 0.0;
-        double x = storm.x + bx * storm.radius * 0.25;
-        double z = storm.z + bz * storm.radius * 0.25;
+        double x = storm.x + bx * storm.radius * StormCell.TORNADO_BACK_FRACTION;
+        double z = storm.z + bz * storm.radius * StormCell.TORNADO_BACK_FRACTION;
 
         int stormRemaining = Math.max(1200, storm.maxAge - storm.age);
         int maxAge = Math.min(Config.TORNADO_DURATION_MINUTES.get() * 1200, stormRemaining);

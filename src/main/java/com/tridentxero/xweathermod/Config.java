@@ -96,24 +96,24 @@ public class Config {
             .defineInRange("supercell.radius", 350, 100, 1000);
 
     public static final ModConfigSpec.IntValue SUPERCELL_DURATION_MINUTES = BUILDER
-            .comment("Lifetime of a supercell in minutes. Make it longer than supercell.buildMaxMinutes plus the tornado duration.")
+            .comment("Lifetime of a supercell in minutes. Make it longer than supercell.buildMaxSeconds plus the tornado duration.")
             .defineInRange("supercell.durationMinutes", 20, 4, 120);
 
-    public static final ModConfigSpec.DoubleValue SUPERCELL_BUILD_MIN_MINUTES = BUILDER
-            .comment("'build_to_tornado' supercells drop their tornado between this many minutes (earliest)...")
-            .defineInRange("supercell.buildMinMinutes", 2.0, 0.5, 30.0);
+    public static final ModConfigSpec.DoubleValue SUPERCELL_BUILD_MIN_SECONDS = BUILDER
+            .comment("'build_to_tornado' supercells drop their tornado between this many seconds (earliest)...")
+            .defineInRange("supercell.buildMinSeconds", 30.0, 10.0, 1800.0);
 
-    public static final ModConfigSpec.DoubleValue SUPERCELL_BUILD_MAX_MINUTES = BUILDER
-            .comment("...and this many minutes (latest) after they start. The exact time is random in that range.")
-            .defineInRange("supercell.buildMaxMinutes", 4.0, 0.5, 30.0);
+    public static final ModConfigSpec.DoubleValue SUPERCELL_BUILD_MAX_SECONDS = BUILDER
+            .comment("...and this many seconds (latest) after they start. The exact time is random in that range.")
+            .defineInRange("supercell.buildMaxSeconds", 50.0, 10.0, 1800.0);
 
     public static final ModConfigSpec.IntValue SUPERCELL_TORNADO_WIND_MPH = BUILDER
-            .comment("Peak wind in mph of the tornado a supercell produces.")
-            .defineInRange("supercell.tornadoWindMph", 130, 40, 300);
+            .comment("Peak wind in mph of the tornado a supercell produces (natural maximum 313).")
+            .defineInRange("supercell.tornadoWindMph", 130, 40, 313);
 
     public static final ModConfigSpec.IntValue SUPERCELL_TORNADO_SIZE = BUILDER
-            .comment("Radius in blocks of the tornado a supercell produces.")
-            .defineInRange("supercell.tornadoSize", 40, 4, 150);
+            .comment("Radius in blocks of the tornado a supercell produces (natural maximum 4200).")
+            .defineInRange("supercell.tornadoSize", 40, 4, 4200);
 
     // ---- Lightning ----
     public static final ModConfigSpec.BooleanValue LIGHTNING_ENABLED = BUILDER

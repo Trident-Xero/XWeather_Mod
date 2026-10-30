@@ -24,7 +24,7 @@ import net.neoforged.neoforge.event.RegisterCommandsEvent;
  *   windspeed: peak wind in mph, 40-300. Picks the EF-inspired gameplay tier (not a scientific rating).
  *   size: tornado radius in blocks, 4-150.
  * /xweather spawn supercell build_to_tornado   (alias: build)
- *   A supercell that starts from nothing, builds up, and drops a tornado at about 40% of its life.
+ *   A supercell that starts from nothing, builds up, and drops a tornado after 30-50 seconds (supercell.buildMinSeconds / buildMaxSeconds).
  * /xweather spawn supercell instant
  *   A supercell at full strength with its tornado already on the ground.
  *   Size, wind and lifetime come from the supercell.* settings in the common config.
@@ -61,8 +61,8 @@ public final class XWeatherCommands {
                 .then(Commands.literal("clear").executes(XWeatherCommands::clearWeather))
                 .then(Commands.literal("spawn")
                         .then(Commands.literal("tornado")
-                                .then(Commands.argument("windspeed", DoubleArgumentType.doubleArg(40.0, 300.0))
-                                        .then(Commands.argument("size", DoubleArgumentType.doubleArg(4.0, 150.0))
+                                .then(Commands.argument("windspeed", DoubleArgumentType.doubleArg(40.0, 999999.0))
+                                        .then(Commands.argument("size", DoubleArgumentType.doubleArg(4.0, 999999.0))
                                                 .executes(XWeatherCommands::spawnTornado))))
                         .then(Commands.literal("supercell")
                                 .then(Commands.literal("build_to_tornado")
@@ -132,8 +132,8 @@ public final class XWeatherCommands {
         String message = instant
                 ? String.format("Spawned supercell #%d at %d, %d: full strength, tornado on the ground (if under the tornado limit)",
                         storm.id, (int) x, (int) z)
-                : String.format("Spawned supercell #%d at %d, %d: building, tornado forms in about %.1f minutes",
-                        storm.id, (int) x, (int) z, (storm.tornadoAtAge - storm.age) / 1200.0);
+                : String.format("Spawned supercell #%d at %d, %d: building, tornado forms in about %d seconds",
+                        storm.id, (int) x, (int) z, (int) Math.round((storm.tornadoAtAge - storm.age) / 20.0));
         source.sendSuccess(() -> Component.literal(message), true);
         return 1;
     }

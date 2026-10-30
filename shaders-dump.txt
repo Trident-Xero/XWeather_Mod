@@ -1,0 +1,394 @@
+﻿=== count: 92
+assets/minecraft/shaders/
+assets/minecraft/shaders/post/
+assets/minecraft/shaders/post/transparency.fsh
+assets/minecraft/shaders/post/spiderclip.fsh
+assets/minecraft/shaders/post/rotscale.vsh
+assets/minecraft/shaders/post/invert.fsh
+assets/minecraft/shaders/post/entity_sobel.fsh
+assets/minecraft/shaders/post/entity_outline_box_blur.fsh
+assets/minecraft/shaders/post/color_convolve.fsh
+assets/minecraft/shaders/post/box_blur.fsh
+assets/minecraft/shaders/post/blit.fsh
+assets/minecraft/shaders/post/bits.fsh
+assets/minecraft/shaders/include/
+assets/minecraft/shaders/include/sample_lightmap.glsl
+assets/minecraft/shaders/include/projection.glsl
+assets/minecraft/shaders/include/matrix.glsl
+assets/minecraft/shaders/include/light.glsl
+assets/minecraft/shaders/include/globals.glsl
+assets/minecraft/shaders/include/fog.glsl
+assets/minecraft/shaders/include/dynamictransforms.glsl
+assets/minecraft/shaders/include/chunksection.glsl
+assets/minecraft/shaders/include/animation_sprite.glsl
+assets/minecraft/shaders/core/
+assets/minecraft/shaders/core/terrain.vsh
+assets/minecraft/shaders/core/terrain.fsh
+assets/minecraft/shaders/core/stars.vsh
+assets/minecraft/shaders/core/stars.fsh
+assets/minecraft/shaders/core/sky.vsh
+assets/minecraft/shaders/core/sky.fsh
+assets/minecraft/shaders/core/screenquad.vsh
+assets/minecraft/shaders/core/rendertype_world_border.vsh
+assets/minecraft/shaders/core/rendertype_world_border.fsh
+assets/minecraft/shaders/core/rendertype_water_mask.vsh
+assets/minecraft/shaders/core/rendertype_water_mask.fsh
+assets/minecraft/shaders/core/rendertype_text_see_through.vsh
+assets/minecraft/shaders/core/rendertype_text_see_through.fsh
+assets/minecraft/shaders/core/rendertype_text_intensity_see_through.vsh
+assets/minecraft/shaders/core/rendertype_text_intensity_see_through.fsh
+assets/minecraft/shaders/core/rendertype_text_intensity.vsh
+assets/minecraft/shaders/core/rendertype_text_intensity.fsh
+assets/minecraft/shaders/core/rendertype_text_background_see_through.vsh
+assets/minecraft/shaders/core/rendertype_text_background_see_through.fsh
+assets/minecraft/shaders/core/rendertype_text_background.vsh
+assets/minecraft/shaders/core/rendertype_text_background.fsh
+assets/minecraft/shaders/core/rendertype_text.vsh
+assets/minecraft/shaders/core/rendertype_text.fsh
+assets/minecraft/shaders/core/rendertype_outline.vsh
+assets/minecraft/shaders/core/rendertype_outline.fsh
+assets/minecraft/shaders/core/rendertype_lines.vsh
+assets/minecraft/shaders/core/rendertype_lines.fsh
+assets/minecraft/shaders/core/rendertype_lightning.vsh
+assets/minecraft/shaders/core/rendertype_lightning.fsh
+assets/minecraft/shaders/core/rendertype_leash.vsh
+assets/minecraft/shaders/core/rendertype_leash.fsh
+assets/minecraft/shaders/core/rendertype_entity_shadow.vsh
+assets/minecraft/shaders/core/rendertype_entity_shadow.fsh
+assets/minecraft/shaders/core/rendertype_end_portal.vsh
+assets/minecraft/shaders/core/rendertype_end_portal.fsh
+assets/minecraft/shaders/core/rendertype_crumbling.vsh
+assets/minecraft/shaders/core/rendertype_crumbling.fsh
+assets/minecraft/shaders/core/rendertype_clouds.vsh
+assets/minecraft/shaders/core/rendertype_clouds.fsh
+assets/minecraft/shaders/core/rendertype_beacon_beam.vsh
+assets/minecraft/shaders/core/rendertype_beacon_beam.fsh
+assets/minecraft/shaders/core/position_tex_color.vsh
+assets/minecraft/shaders/core/position_tex_color.fsh
+assets/minecraft/shaders/core/position_tex.vsh
+assets/minecraft/shaders/core/position_tex.fsh
+assets/minecraft/shaders/core/position_color.vsh
+assets/minecraft/shaders/core/position_color.fsh
+assets/minecraft/shaders/core/position.vsh
+assets/minecraft/shaders/core/position.fsh
+assets/minecraft/shaders/core/particle.vsh
+assets/minecraft/shaders/core/particle.fsh
+assets/minecraft/shaders/core/panorama.vsh
+assets/minecraft/shaders/core/panorama.fsh
+assets/minecraft/shaders/core/lightmap.fsh
+assets/minecraft/shaders/core/item.vsh
+assets/minecraft/shaders/core/item.fsh
+assets/minecraft/shaders/core/gui.vsh
+assets/minecraft/shaders/core/gui.fsh
+assets/minecraft/shaders/core/glint.vsh
+assets/minecraft/shaders/core/glint.fsh
+assets/minecraft/shaders/core/entity.vsh
+assets/minecraft/shaders/core/entity.fsh
+assets/minecraft/shaders/core/debug_point.vsh
+assets/minecraft/shaders/core/block.vsh
+assets/minecraft/shaders/core/block.fsh
+assets/minecraft/shaders/core/blit_screen.fsh
+assets/minecraft/shaders/core/animate_sprite_interpolate.fsh
+assets/minecraft/shaders/core/animate_sprite_blit.fsh
+assets/minecraft/shaders/core/animate_sprite.vsh
+=== FILE assets/minecraft/shaders/post/transparency.fsh
+#version 330
+
+uniform sampler2D MainSampler;
+uniform sampler2D MainDepthSampler;
+uniform sampler2D TranslucentSampler;
+uniform sampler2D TranslucentDepthSampler;
+uniform sampler2D ItemEntitySampler;
+uniform sampler2D ItemEntityDepthSampler;
+uniform sampler2D ParticlesSampler;
+uniform sampler2D ParticlesDepthSampler;
+uniform sampler2D WeatherSampler;
+uniform sampler2D WeatherDepthSampler;
+uniform sampler2D CloudsSampler;
+uniform sampler2D CloudsDepthSampler;
+
+in vec2 texCoord;
+
+vec4 color_layers[6] = vec4[](vec4(0.0), vec4(0.0), vec4(0.0), vec4(0.0), vec4(0.0), vec4(0.0));
+float depth_layers[6] = float[](0, 0, 0, 0, 0, 0);
+int active_layers = 0;
+
+out vec4 fragColor;
+
+void try_insert(vec4 color, float depth) {
+    if (color.a == 0.0) {
+        return;
+    }
+
+    color_layers[active_layers] = color;
+    depth_layers[active_layers] = depth;
+
+    int jj = active_layers++;
+    int ii = jj - 1;
+    while (jj > 0 && depth_layers[jj] > depth_layers[ii]) {
+        float depthTemp = depth_layers[ii];
+        depth_layers[ii] = depth_layers[jj];
+        depth_layers[jj] = depthTemp;
+
+        vec4 colorTemp = color_layers[ii];
+        color_layers[ii] = color_layers[jj];
+        color_layers[jj] = colorTemp;
+
+        jj = ii--;
+    }
+}
+
+vec3 blend(vec3 dst, vec4 src) {
+    return (dst * (1.0 - src.a)) + src.rgb;
+}
+
+void main() {
+    color_layers[0] = vec4(texture(MainSampler, texCoord).rgb, 1.0);
+    depth_layers[0] = texture(MainDepthSampler, texCoord).r;
+    active_layers = 1;
+
+    try_insert(texture(TranslucentSampler, texCoord), texture(TranslucentDepthSampler, texCoord).r);
+    try_insert(texture(ItemEntitySampler, texCoord), texture(ItemEntityDepthSampler, texCoord).r);
+    try_insert(texture(ParticlesSampler, texCoord), texture(ParticlesDepthSampler, texCoord).r);
+    try_insert(texture(WeatherSampler, texCoord), texture(WeatherDepthSampler, texCoord).r);
+    try_insert(texture(CloudsSampler, texCoord), texture(CloudsDepthSampler, texCoord).r);
+
+    vec3 texelAccum = color_layers[0].rgb;
+    for (int ii = 1; ii < active_layers; ++ii) {
+        texelAccum = blend(texelAccum, color_layers[ii]);
+    }
+
+    fragColor = vec4(texelAccum.rgb, 1.0);
+}
+
+=== FILE assets/minecraft/shaders/include/projection.glsl
+#version 330
+
+layout(std140) uniform Projection {
+    mat4 ProjMat;
+};
+
+vec4 projection_from_position(vec4 position) {
+    vec4 projection = position * 0.5;
+    projection.xy = vec2(projection.x + projection.w, projection.y + projection.w);
+    projection.zw = position.zw;
+    return projection;
+}
+
+=== FILE assets/minecraft/shaders/include/globals.glsl
+#version 330
+
+layout(std140) uniform Globals {
+    ivec3 CameraBlockPos;
+    vec3 CameraOffset;
+    vec2 ScreenSize;
+    float GlintAlpha;
+    float GameTime;
+    int MenuBlurRadius;
+    int UseRgss;
+};
+
+=== FILE assets/minecraft/shaders/include/fog.glsl
+#version 330
+
+layout(std140) uniform Fog {
+    vec4 FogColor;
+    float FogEnvironmentalStart;
+    float FogEnvironmentalEnd;
+    float FogRenderDistanceStart;
+    float FogRenderDistanceEnd;
+    float FogSkyEnd;
+    float FogCloudsEnd;
+};
+
+float linear_fog_value(float vertexDistance, float fogStart, float fogEnd) {
+    if (vertexDistance <= fogStart) {
+        return 0.0;
+    } else if (vertexDistance >= fogEnd) {
+        return 1.0;
+    }
+
+    return (vertexDistance - fogStart) / (fogEnd - fogStart);
+}
+
+float total_fog_value(float sphericalVertexDistance, float cylindricalVertexDistance, float environmentalStart, float environmantalEnd, float renderDistanceStart, float renderDistanceEnd) {
+    return max(linear_fog_value(sphericalVertexDistance, environmentalStart, environmantalEnd), linear_fog_value(cylindricalVertexDistance, renderDistanceStart, renderDistanceEnd));
+}
+
+vec4 apply_fog(vec4 inColor, float sphericalVertexDistance, float cylindricalVertexDistance, float environmentalStart, float environmantalEnd, float renderDistanceStart, float renderDistanceEnd, vec4 fogColor) {
+    float fogValue = total_fog_value(sphericalVertexDistance, cylindricalVertexDistance, environmentalStart, environmantalEnd, renderDistanceStart, renderDistanceEnd);
+    return vec4(mix(inColor.rgb, fogColor.rgb, fogValue * fogColor.a), inColor.a);
+}
+
+float fog_spherical_distance(vec3 pos) {
+    return length(pos);
+}
+
+float fog_cylindrical_distance(vec3 pos) {
+    float distXZ = length(pos.xz);
+    float distY = abs(pos.y);
+    return max(distXZ, distY);
+}
+
+=== FILE assets/minecraft/shaders/include/dynamictransforms.glsl
+#version 330
+
+layout(std140) uniform DynamicTransforms {
+    mat4 ModelViewMat;
+    vec4 ColorModulator;
+    vec3 ModelOffset;
+    mat4 TextureMat;
+};
+
+=== FILE assets/minecraft/shaders/core/sky.vsh
+#version 330
+
+#moj_import <minecraft:fog.glsl>
+#moj_import <minecraft:dynamictransforms.glsl>
+#moj_import <minecraft:projection.glsl>
+
+in vec3 Position;
+
+out float sphericalVertexDistance;
+out float cylindricalVertexDistance;
+
+void main() {
+    gl_Position = ProjMat * ModelViewMat * vec4(Position, 1.0);
+
+    sphericalVertexDistance = fog_spherical_distance(Position);
+    cylindricalVertexDistance = fog_cylindrical_distance(Position);
+}
+
+=== FILE assets/minecraft/shaders/core/sky.fsh
+#version 330
+
+#moj_import <minecraft:fog.glsl>
+#moj_import <minecraft:dynamictransforms.glsl>
+
+in float sphericalVertexDistance;
+in float cylindricalVertexDistance;
+
+out vec4 fragColor;
+
+void main() {
+    fragColor = apply_fog(ColorModulator, sphericalVertexDistance, cylindricalVertexDistance, 0.0, FogSkyEnd, FogSkyEnd, FogSkyEnd, FogColor);
+}
+
+=== FILE assets/minecraft/shaders/core/screenquad.vsh
+#version 330
+
+out vec2 texCoord;
+
+void main() {
+    vec2 uv = vec2((gl_VertexID << 1) & 2, gl_VertexID & 2);
+    vec4 pos = vec4(uv * vec2(2, 2) + vec2(-1, -1), 0, 1);
+
+    gl_Position = pos;
+    texCoord = uv;
+}
+
+=== FILE assets/minecraft/shaders/core/position_tex_color.vsh
+#version 330
+
+// Can't moj_import in things used during startup, when resource packs don't exist.
+// This is a copy of dynamicimports.glsl and projection.glsl
+layout(std140) uniform DynamicTransforms {
+    mat4 ModelViewMat;
+    vec4 ColorModulator;
+    vec3 ModelOffset;
+    mat4 TextureMat;
+};
+layout(std140) uniform Projection {
+    mat4 ProjMat;
+};
+
+in vec3 Position;
+in vec2 UV0;
+in vec4 Color;
+
+out vec2 texCoord0;
+out vec4 vertexColor;
+
+void main() {
+    gl_Position = ProjMat * ModelViewMat * vec4(Position, 1.0);
+
+    texCoord0 = UV0;
+    vertexColor = Color;
+}
+
+=== FILE assets/minecraft/shaders/core/position_tex_color.fsh
+#version 330
+
+// Can't moj_import in things used during startup, when resource packs don't exist.
+// This is a copy of dynamicimports.glsl
+layout(std140) uniform DynamicTransforms {
+    mat4 ModelViewMat;
+    vec4 ColorModulator;
+    vec3 ModelOffset;
+    mat4 TextureMat;
+};
+
+uniform sampler2D Sampler0;
+
+in vec2 texCoord0;
+in vec4 vertexColor;
+
+out vec4 fragColor;
+
+void main() {
+    vec4 color = texture(Sampler0, texCoord0) * vertexColor;
+    if (color.a == 0.0) {
+        discard;
+    }
+    fragColor = color * ColorModulator;
+}
+
+=== FILE assets/minecraft/shaders/core/position_tex.vsh
+#version 330
+
+#moj_import <minecraft:dynamictransforms.glsl>
+#moj_import <minecraft:projection.glsl>
+
+in vec3 Position;
+in vec2 UV0;
+
+out vec2 texCoord0;
+
+void main() {
+    gl_Position = ProjMat * ModelViewMat * vec4(Position, 1.0);
+
+    texCoord0 = UV0;
+}
+
+=== FILE assets/minecraft/shaders/core/position_tex.fsh
+#version 330
+
+#moj_import <minecraft:dynamictransforms.glsl>
+
+uniform sampler2D Sampler0;
+
+in vec2 texCoord0;
+
+out vec4 fragColor;
+
+void main() {
+    vec4 color = texture(Sampler0, texCoord0);
+    if (color.a == 0.0) {
+        discard;
+    }
+    fragColor = color * ColorModulator;
+}
+
+=== FILE assets/minecraft/shaders/core/blit_screen.fsh
+#version 330
+
+uniform sampler2D InSampler;
+
+in vec2 texCoord;
+
+out vec4 fragColor;
+
+void main() {
+    fragColor = texture(InSampler, texCoord);
+}
+

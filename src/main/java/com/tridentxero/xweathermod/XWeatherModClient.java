@@ -4,6 +4,7 @@ import com.tridentxero.xweathermod.client.ClientConfig;
 import com.tridentxero.xweathermod.client.ClientPayloadHandler;
 import com.tridentxero.xweathermod.client.CloudParticleProvider;
 import com.tridentxero.xweathermod.client.RainParticleProvider;
+import com.tridentxero.xweathermod.client.VolumetricClouds;
 import com.tridentxero.xweathermod.net.DebrisPayload;
 import com.tridentxero.xweathermod.net.StormSyncPayload;
 import com.tridentxero.xweathermod.particle.ModParticles;
@@ -15,6 +16,7 @@ import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.fml.common.Mod;
 import net.neoforged.fml.config.ModConfig;
 import net.neoforged.neoforge.client.event.RegisterParticleProvidersEvent;
+import net.neoforged.neoforge.client.event.RegisterRenderPipelinesEvent;
 import net.neoforged.neoforge.client.gui.ConfigurationScreen;
 import net.neoforged.neoforge.client.gui.IConfigScreenFactory;
 import net.neoforged.neoforge.client.network.event.RegisterClientPayloadHandlersEvent;
@@ -34,6 +36,12 @@ public class XWeatherModClient {
     static void registerClientPayloads(RegisterClientPayloadHandlersEvent event) {
         event.register(StormSyncPayload.TYPE, ClientPayloadHandler::handle);
         event.register(DebrisPayload.TYPE, ClientPayloadHandler::handleDebris);
+    }
+
+    // Volumetric cloud mode (clouds.mode = VOLUMETRIC): the shader pipelines and the cloud-pass hook.
+    @SubscribeEvent
+    static void registerRenderPipelines(RegisterRenderPipelinesEvent event) {
+        VolumetricClouds.registerPipelines(event);
     }
 
     @SubscribeEvent

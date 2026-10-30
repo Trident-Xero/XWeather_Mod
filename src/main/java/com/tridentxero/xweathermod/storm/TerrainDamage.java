@@ -129,8 +129,23 @@ public final class TerrainDamage {
         for (int attempt = 0; attempt < hits * 3 && landed < hits; attempt++) {
             double angle = random.nextDouble() * Math.PI * 2.0;
             double r = footprint * Math.sqrt(random.nextDouble());
-            int x = (int) Math.floor(t.x + Math.cos(angle) * r);
-            int z = (int) Math.floor(t.z + Math.sin(angle) * r);
+            double sx = t.x + Math.cos(angle) * r;
+            double sz = t.z + Math.sin(angle) * r;
+            if (footprint > 200.0 && !level.players().isEmpty()) {
+                // A huge tornado's footprint is mostly unloaded; bite near a player instead, if inside the footprint.
+                var near = level.players().get(random.nextInt(level.players().size()));
+                double a2 = random.nextDouble() * Math.PI * 2.0;
+                double r2 = 96.0 * Math.sqrt(random.nextDouble());
+                sx = near.getX() + Math.cos(a2) * r2;
+                sz = near.getZ() + Math.sin(a2) * r2;
+                double ddx = sx - t.x;
+                double ddz = sz - t.z;
+                if (ddx * ddx + ddz * ddz > footprint * footprint) {
+                    continue;
+                }
+            }
+            int x = (int) Math.floor(sx);
+            int z = (int) Math.floor(sz);
             if (!level.hasChunkAt(new BlockPos(x, 64, z))) {
                 continue; // never load chunks for weather
             }

@@ -9,7 +9,42 @@ import net.neoforged.neoforge.common.ModConfigSpec;
 public final class ClientConfig {
     private static final ModConfigSpec.Builder BUILDER = new ModConfigSpec.Builder();
 
+    /** How storm clouds, wall clouds and tornado funnels are drawn. */
+    public enum CloudMode {
+        /** Billboard puffs (the original look). Cheapest, works everywhere. */
+        PARTICLES,
+        /** One ray-marched volume shader draws the whole storm. Needs a GPU that can run a heavy fragment shader. */
+        VOLUMETRIC
+    }
+
     // ---- Clouds ----
+    public static final ModConfigSpec.EnumValue<CloudMode> CLOUD_MODE = BUILDER
+            .comment("How storm clouds, wall clouds and tornado funnels are drawn.",
+                    "PARTICLES = billboard puffs (default, cheap).",
+                    "VOLUMETRIC = a ray-marched volume shader draws the whole storm (heavier on the GPU).",
+                    "VOLUMETRIC draws after translucent particles, so it works whatever the Clouds video setting is.",
+                    "If the volumetric pass fails or never runs, the mod falls back to PARTICLES by itself.")
+            .defineEnum("clouds.mode", CloudMode.PARTICLES);
+
+    public static final ModConfigSpec.IntValue VOLUMETRIC_STEPS = BUILDER
+            .comment("VOLUMETRIC only: how many samples each pixel takes through the storm. More = smoother and less grain,",
+                    "but slower. Lower this first if the frame rate drops.")
+            .defineInRange("clouds.volumetric.steps", 56, 24, 160);
+
+    public static final ModConfigSpec.BooleanValue VOLUMETRIC_HIDE_VANILLA = BUILDER
+            .comment("VOLUMETRIC only: while a volumetric storm is on screen, switch the vanilla Clouds video setting to Off,",
+                    "then put it back as it was when the storm is gone, you leave the world, or the mode changes.",
+                    "If you change the Clouds setting yourself meanwhile, the mod leaves your choice alone.")
+            .define("clouds.volumetric.hideVanillaClouds", true);
+
+    public static final ModConfigSpec.IntValue VOLUMETRIC_DISTANCE = BUILDER
+            .comment("VOLUMETRIC only: storms farther than this many blocks are not drawn.")
+            .defineInRange("clouds.volumetric.maxDistance", 6000, 500, 16000);
+
+    public static final ModConfigSpec.DoubleValue VOLUMETRIC_DENSITY = BUILDER
+            .comment("VOLUMETRIC only: how thick the cloud looks. 1.0 is the default, lower is wispier, higher is more opaque.")
+            .defineInRange("clouds.volumetric.density", 1.0, 0.3, 2.5);
+
     public static final ModConfigSpec.IntValue MAX_PUFFS = BUILDER
             .comment("Maximum number of cloud puffs alive at once. Lower this if the game stutters during storms.",
                     "0 disables the storm clouds entirely.")
@@ -70,7 +105,7 @@ public final class ClientConfig {
     public static final ModConfigSpec.IntValue FUNNEL_MAX_PARTICLES = BUILDER
             .comment("Maximum funnel puffs alive at once, across all tornadoes. Lower this if the game stutters near a tornado.",
                     "0 disables funnels entirely.")
-            .defineInRange("funnel.maxParticles", 5000, 0, 15000);
+            .defineInRange("funnel.particleBudget", 12000, 0, 60000);
 
     public static final ModConfigSpec.IntValue FUNNEL_MAX_DISTANCE = BUILDER
             .comment("Funnels are only drawn for tornadoes within this many blocks of you.")

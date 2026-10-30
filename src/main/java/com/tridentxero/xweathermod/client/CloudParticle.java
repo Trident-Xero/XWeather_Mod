@@ -24,7 +24,9 @@ public class CloudParticle extends SingleQuadParticle {
     /** Set by {@link CloudSpawner} while no storm exists: every live puff then fades out within about 30 ticks. */
     public static volatile boolean FADE_ALL = false;
 
-    private final float maxAlpha;
+    private float maxAlpha;
+    /** Grey level before height shading. */
+    private float baseLight = 1.0F;
 
     public CloudParticle(ClientLevel level, double x, double y, double z,
                          double xd, double darkness, double zd, SpriteSet spriteSet, RandomSource random) {
@@ -39,6 +41,7 @@ public class CloudParticle extends SingleQuadParticle {
         this.hasPhysics = false;
 
         float lightness = 1.0F - 0.65F * dark;
+        this.baseLight = lightness;
         this.setColor(lightness, lightness, lightness);
 
         this.quadSize = 34.0F + random.nextFloat() * 44.0F; // half-width in blocks
@@ -50,6 +53,25 @@ public class CloudParticle extends SingleQuadParticle {
         this.setSize(this.quadSize, 4.0F);
 
         LIVE.incrementAndGet();
+    }
+
+    /** Restyles a fresh puff (used for supercell parts): size multiplier, grey level 0..1, opacity multiplier. */
+    public void style(float sizeScale, float light, float alphaScale) {
+        this.quadSize *= sizeScale;
+        this.setSize(this.quadSize, 4.0F);
+        this.baseLight = light;
+        this.setColor(light, light, light);
+        this.maxAlpha = Math.min(1.0F, this.maxAlpha * alphaScale);
+    }
+
+    /**
+     * Gives the puff depth by lighting it for where it sits inside its cloud layer: h01 = 0 at the underside (dark,
+     * lit only by what bounces up), 1 at the top (bright, sunlit).
+     */
+    public void shade(float h01) {
+        float k = 0.62F + 0.38F * Math.max(0.0F, Math.min(1.0F, h01));
+        float l = this.baseLight * k;
+        this.setColor(l, l, Math.min(1.0F, l * 1.04F));
     }
 
     @Override

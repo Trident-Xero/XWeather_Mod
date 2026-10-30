@@ -76,7 +76,7 @@ public final class EntityForces {
         for (TornadoSnapshot t : tornadoes) {
             double cx = t.x() + t.vx() * elapsed;
             double cz = t.z() + t.vz() * elapsed;
-            double reach = Math.min(160.0, Math.max(16.0, t.size() * 4.0));
+            double reach = reachOf(t.size());
             collect(level, new AABB(cx - reach, Y_MIN, cz - reach, cx + reach, Y_MAX, cz + reach), seen, candidates, cap);
         }
         if (Config.FORCES_STORM_WIND.get() && !storms.isEmpty()) {
@@ -91,6 +91,11 @@ public final class EntityForces {
         for (Entity entity : candidates) {
             apply(level, entity, storms, tornadoes, elapsed, gameTime, strength);
         }
+    }
+
+    /** Distance from a tornado's centre inside which entities are handled: 4 x size up to 160, and 1.8 x size for big ones. */
+    private static double reachOf(double size) {
+        return size >= 100.0 ? Math.min(8000.0, size * 1.8) : Math.min(160.0, Math.max(16.0, size * 4.0));
     }
 
     private static void collect(ServerLevel level, AABB box, Set<Integer> seen, List<Entity> out, int cap) {
@@ -130,7 +135,7 @@ public final class EntityForces {
             double dx = ex - (t.x() + t.vx() * elapsed);
             double dz = ez - (t.z() + t.vz() * elapsed);
             double d = Math.sqrt(dx * dx + dz * dz);
-            double reach = Math.min(160.0, Math.max(16.0, t.size() * 4.0));
+            double reach = reachOf(t.size());
             if (d <= reach) {
                 inTornadoReach = true;
             }

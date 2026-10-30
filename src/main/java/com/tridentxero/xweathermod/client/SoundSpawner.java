@@ -104,7 +104,7 @@ public final class SoundSpawner {
 
         // --- Tornado roar ---
         if (--roarTimer <= 0) {
-            roarTimer = 160;
+            roarTimer = 160; // clip is 9 s with 1 s soft ends, so consecutive plays blend with no pulsing
             TornadoSnapshot nearest = null;
             double best = ROAR_RANGE;
             double bx = 0.0;
@@ -135,7 +135,7 @@ public final class SoundSpawner {
 
         // --- Tornado hum (peak wind above 201 mph) ---
         if (--humTimer <= 0) {
-            humTimer = 150;
+            humTimer = 140; // clip is 8 s with 1 s soft ends
             TornadoSnapshot loudest = null;
             double bestDist = ROAR_RANGE;
             double hx = 0.0;

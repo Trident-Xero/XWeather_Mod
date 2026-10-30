@@ -23,6 +23,11 @@ public final class StormCell {
             Codec.FLOAT.optionalFieldOf("tornadoSize", 0.0F).forGetter(c -> c.tornadoSize)
     ).apply(instance, StormCell::new));
 
+    /** A supercell's tornado forms this fraction of its radius BEHIND its centre, under the wall cloud. */
+    public static final double TORNADO_BACK_FRACTION = 0.25;
+    /** Supercells reach full strength this fast (ticks) at most, so a 30-50 second build has a storm to show. */
+    private static final float SUPERCELL_RISE_TICKS = 800.0F;
+
     public final int id;
     public double x;
     public double z;
@@ -63,8 +68,22 @@ public final class StormCell {
     public float intensity() {
         float progress = Math.min(1.0F, Math.max(0.0F, this.age / (float) this.maxAge));
         float rise = Math.min(1.0F, progress / 0.15F);
+        if (this.supercell) {
+            rise = Math.min(1.0F, this.age / Math.min(this.maxAge * 0.15F, SUPERCELL_RISE_TICKS));
+        }
         float fall = Math.min(1.0F, (1.0F - progress) / 0.20F);
         return Math.max(0.0F, Math.min(rise, fall));
+    }
+
+    /** 0..1: how far a supercell has built toward dropping its tornado (1 once mature or when it has no timer). */
+    public float development() {
+        if (!this.supercell) {
+            return 0.0F;
+        }
+        if (this.tornadoAtAge > 0) {
+            return Math.max(0.0F, Math.min(1.0F, this.age / (float) this.tornadoAtAge));
+        }
+        return 1.0F;
     }
 
     public boolean expired() {
@@ -72,6 +91,7 @@ public final class StormCell {
     }
 
     public StormSnapshot snapshot() {
-        return new StormSnapshot(this.id, (float) this.x, (float) this.z, this.vx, this.vz, this.radius, intensity());
+        return new StormSnapshot(this.id, (float) this.x, (float) this.z, this.vx, this.vz, this.radius, intensity(),
+                this.supercell, development());
     }
 }
